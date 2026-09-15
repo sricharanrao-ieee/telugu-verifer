@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dataset Verifier</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .slide-in-right { animation: slideInRight 0.3s ease-out forwards; }
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen w-screen overflow-hidden flex flex-col">
+    <header class="bg-white shadow-sm border-b border-slate-200 z-20 shrink-0">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <button id="btn-back" class="hidden text-slate-500 hover:text-slate-800 transition-colors mr-1 w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100">
+                    <i class="fa-solid fa-arrow-left text-lg"></i>
+                </button>
+                <div class="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-language"></i>
+                </div>
+                <h1 class="font-bold text-lg tracking-tight truncate">Data Verifier</h1>
+            </div>
+            <div class="flex gap-2 text-sm font-medium items-center bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                <i class="fa-solid fa-chart-pie text-slate-400 mr-1"></i>
+                <span id="stats-completed" class="text-blue-600">0</span>
+                <span class="text-slate-400">/</span>
+                <span id="stats-total" class="text-slate-600">0</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 relative w-full h-full flex flex-col overflow-hidden max-w-4xl mx-auto">
+        
+        <!-- LOADING VIEW -->
+        <div id="view-loading" class="absolute inset-0 z-10 bg-slate-50 flex flex-col items-center justify-center">
+            <div class="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+            <h2 class="text-xl font-bold text-slate-700">Syncing Data</h2>
+            <p class="text-slate-500 mt-2 text-sm">Fetching latest records from Google Sheets...</p>
+        </div>
+
+        <!-- DASHBOARD (LIST) VIEW -->
+        <div id="view-dashboard" class="hidden absolute inset-0 z-0 flex flex-col bg-slate-50">
+            <!-- Tabs -->
+            <div class="px-4 pt-4 pb-2 shrink-0 flex gap-2 overflow-x-auto custom-scroll border-b border-slate-200">
+                <button data-filter="all" class="filter-tab active px-4 py-2 rounded-full text-sm font-semibold transition-colors bg-slate-800 text-white">All Records</button>
+                <button data-filter="pending" class="filter-tab px-4 py-2 rounded-full text-sm font-semibold transition-colors bg-white text-slate-600 border border-slate-200 hover:bg-slate-100">Pending</button>
+                <button data-filter="verified" class="filter-tab px-4 py-2 rounded-full text-sm font-semibold transition-colors bg-white text-slate-600 border border-slate-200 hover:bg-slate-100">Verified</button>
+            </div>
+            <!-- List Container -->
+            <div id="list-container" class="flex-1 overflow-y-auto custom-scroll p-4 flex flex-col gap-3 pb-24">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+
+        <!-- DETAIL (REVIEW) VIEW -->
+        <div id="view-detail" class="hidden absolute inset-0 z-0 flex flex-col bg-slate-50">
+            
+            <!-- Scrollable Content -->
+            <div class="flex-1 overflow-y-auto custom-scroll p-4 pb-6">
+                <!-- ID Badge -->
+                <div class="flex justify-between items-center mb-4">
+                    <div id="detail-id" class="bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg text-sm shadow-sm"></div>
+                    <div id="detail-row" class="text-xs font-semibold text-slate-400 bg-slate-200 px-2 py-1 rounded"></div>
+                </div>
+
+                <!-- Fields Container -->
+                <div id="levels-container" class="space-y-3 mb-6">
+                    <!-- Dynamically populated fields -->
+                </div>
+
+                <!-- Comment Section -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                    <label class="flex items-center gap-2 text-sm font-bold text-slate-600 mb-2">
+                        <i class="fa-regular fa-comment-dots text-slate-400"></i> Reviewer Comments
+                    </label>
+                    <textarea id="input-comment" rows="3" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-sm text-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-none" placeholder="Optional: Add notes about translation accuracy, grammar, or reasons for rejection..."></textarea>
+                </div>
+            </div>
+
+            <!-- Fixed Bottom Action Bar -->
+            <div class="bg-white border-t border-slate-200 p-4 shrink-0 flex items-center justify-between gap-3 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)] z-10 pb-safe">
+                <button id="btn-prev" class="w-12 h-12 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors shrink-0 active:scale-95 disabled:opacity-30 disabled:pointer-events-none">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                
+                <div class="flex-1 flex gap-3 max-w-sm mx-auto">
+                    <button id="btn-no" class="flex-1 bg-white border-2 border-rose-200 hover:bg-rose-50 hover:border-rose-300 text-rose-600 font-bold py-2.5 rounded-xl transition-all flex flex-col items-center justify-center gap-1 active:scale-95 group relative">
+                        <i class="fa-solid fa-xmark text-xl group-hover:scale-110 transition-transform"></i> 
+                        <span class="text-xs uppercase tracking-wide">Incorrect</span>
+                    </button>
+                    <button id="btn-yes" class="flex-1 bg-white border-2 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300 text-emerald-600 font-bold py-2.5 rounded-xl transition-all flex flex-col items-center justify-center gap-1 active:scale-95 group relative">
+                        <i class="fa-solid fa-check text-xl group-hover:scale-110 transition-transform"></i> 
+                        <span class="text-xs uppercase tracking-wide">Correct</span>
+                    </button>
+                </div>
+
+                <button id="btn-next" class="w-12 h-12 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors shrink-0 active:scale-95 disabled:opacity-30 disabled:pointer-events-none">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-4 right-4 max-w-[90vw] bg-slate-800 text-white px-4 py-3 rounded-lg shadow-xl transform transition-all duration-300 translate-y-[-150%] opacity-0 z-50 flex items-center gap-3">
+        <i id="toast-icon" class="fa-solid fa-circle-info"></i>
+        <span id="toast-message" class="text-sm font-medium">Message</span>
+    </div>
+
+    <style>
+        .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+        textarea::placeholder { color: #94a3b8; }
+    </style>
+
+    <script>
+        // Global State
+        let allData = [];
+        let currentFilter = 'all'; // 'all', 'pending', 'verified'
+        let currentViewIndices = []; // Array of allData indices matching current filter
+        let activeDataIndex = -1;    // Currently open row in allData
+        let isSubmitting = false;
+        const scriptUrl = 'https://script.google.com/macros/s/AKfycbyu8J74RpM6UzPvNIfFf6oEOhb4MwQbQHSpUfvBJuQ9n2ijzzGgImrKDU5ZNsSeyxskQA/exec';
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchDataFromSheet();
+            setupTabListeners();
+        });
+
+        // ==========================================
+        // DATA FETCHING & FILTERING
+        // ==========================================
+        async function fetchDataFromSheet() {
+            switchView('loading');
+            try {
+                const response = await fetch(scriptUrl);
+                if (!response.ok) throw new Error("Failed to connect to backend");
+                
+                allData = await response.json();
+                applyFilter('all');
+                switchView('dashboard');
+            } catch (error) {
+                console.error(error);
+                showToast("Failed to load data. Refresh page to try again.", 'error');
+            }
+        }
+
+        function setupTabListeners() {
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    document.querySelectorAll('.filter-tab').forEach(t => {
+                        t.className = "filter-tab px-4 py-2 rounded-full text-sm font-semibold transition-colors bg-white text-slate-600 border border-slate-200 hover:bg-slate-100";
+                    });
+                    const target = e.target;
+                    target.className = "filter-tab active px-4 py-2 rounded-full text-sm font-semibold transition-colors bg-slate-800 text-white";
+                    applyFilter(target.dataset.filter);
+                });
+            });
+        }
+
+        function applyFilter(filter) {
+            currentFilter = filter;
+            currentViewIndices = [];
+            const container = document.getElementById('list-container');
+            container.innerHTML = '';
+
+            if (allData.length === 0) {
+                container.innerHTML = `<div class="text-center p-8 text-slate-500">No data found in sheet.</div>`;
+                return;
+            }
+
+            let hasItems = false;
+
+            allData.forEach((row, index) => {
+                const isVerified = !!row.Verified_Is_Correct;
+                if (filter === 'pending' && isVerified) return;
+                if (filter === 'verified' && !isVerified) return;
+                
+                currentViewIndices.push(index);
+                hasItems = true;
+
+                // Create List Item
+                const el = document.createElement('div');
+                el.className = "bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-start gap-3 cursor-pointer hover:border-blue-400 hover:shadow-md transition-all active:scale-[0.99]";
+                
+                let iconHtml = '<i class="fa-regular fa-circle text-slate-300 text-xl"></i>';
+                if (row.Verified_Is_Correct === 'Yes') iconHtml = '<i class="fa-solid fa-circle-check text-emerald-500 text-xl"></i>';
+                if (row.Verified_Is_Correct === 'No') iconHtml = '<i class="fa-solid fa-circle-xmark text-rose-500 text-xl"></i>';
+
+                const idLabel = escapeHTML(row.ID || `Row ${row._rowIndex}`);
+                const previewTitle = escapeHTML(row.Original_English || 'No original text available');
+                const previewSubtitle = escapeHTML(row.Level_100_Telugu || 'No translation available');
+                
+                el.innerHTML = `
+                    <div class="mt-0.5 shrink-0 flex items-center justify-center w-6 h-6">${iconHtml}</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-[11px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded tracking-wide">${idLabel}</span>
+                            ${row.Comments ? '<i class="fa-solid fa-comment text-slate-300 text-xs"></i>' : ''}
+                        </div>
+                        <p class="text-sm font-bold text-slate-800 truncate">${previewTitle}</p>
+                        <p class="text-xs text-slate-500 truncate mt-1">${previewSubtitle}</p>
+                    </div>
+                `;
+                
+                el.onclick = () => openDetail(index);
+                container.appendChild(el);
+            });
+
+            if (!hasItems) {
+                container.innerHTML = `<div class="text-center flex flex-col items-center justify-center py-12 text-slate-500">
+                    <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                        <i class="fa-solid fa-folder-open text-2xl text-slate-300"></i>
+                    </div>
+                    <p>No ${filter === 'all' ? '' : filter} items found.</p>
+                </div>`;
+            }
+
+            updateStats();
+        }
+
+        function updateStats() {
+            const total = allData.length;
+            const completed = allData.filter(r => !!r.Verified_Is_Correct).length;
+            document.getElementById('stats-completed').innerText = completed;
+            document.getElementById('stats-total').innerText = total;
+        }
+
+        // ==========================================
+        // DETAIL VIEW LOGIC
+        // ==========================================
+        function openDetail(dataIndex) {
+            activeDataIndex = dataIndex;
+            const row = allData[dataIndex];
+            
+            // Header Info
+            document.getElementById('detail-id').innerText = row.ID || `ID Not Set`;
+            document.getElementById('detail-row').innerText = `Sheet Row: ${row._rowIndex}`;
+            
+            // Render specific requested columns structurally
+            const levelsContainer = document.getElementById('levels-container');
+            levelsContainer.innerHTML = '';
+            
+            const fieldConfig = [
+                { key: 'Original_English', label: 'Original English', style: 'border-slate-300 bg-white' },
+                { key: 'Level_0_English', label: 'Level 0 (English)', style: 'border-blue-400 bg-blue-50/40' },
+                { key: 'Level_25_CodeMix', label: 'Level 25 (CodeMix)', style: 'border-indigo-400 bg-indigo-50/40' },
+                { key: 'Level_50_CodeMix', label: 'Level 50 (CodeMix)', style: 'border-violet-400 bg-violet-50/40' },
+                { key: 'Level_75_CodeMix', label: 'Level 75 (CodeMix)', style: 'border-purple-400 bg-purple-50/40' },
+                { key: 'Level_100_Telugu', label: 'Level 100 (Telugu)', style: 'border-fuchsia-400 bg-fuchsia-50/40' }
+            ];
+
+            fieldConfig.forEach(item => {
+                if(row[item.key] !== undefined && row[item.key] !== "") {
+                    levelsContainer.innerHTML += `
+                        <div class="border-l-4 ${item.style} rounded-r-xl p-3 shadow-sm border border-slate-100 border-l-[4px]">
+                            <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">${item.label}</div>
+                            <div class="text-sm sm:text-base text-slate-800 font-medium whitespace-pre-wrap">${escapeHTML(String(row[item.key]))}</div>
+                        </div>
+                    `;
+                }
+            });
+
+            // Fallback for any unknown extra columns in the sheet
+            const knownKeys = ['ID', '_rowIndex', 'Verified_Is_Correct', 'Comments', ...fieldConfig.map(c=>c.key)];
+            Object.keys(row).forEach(key => {
+                if(!knownKeys.includes(key) && row[key] !== "") {
+                    levelsContainer.innerHTML += `
+                        <div class="border-l-4 border-slate-200 bg-white rounded-r-xl p-3 shadow-sm border border-slate-100 border-l-[4px] mt-2">
+                            <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">${escapeHTML(key)}</div>
+                            <div class="text-sm text-slate-700 whitespace-pre-wrap">${escapeHTML(String(row[key]))}</div>
+                        </div>
+                    `;
+                }
+            });
+
+            // Set current comment
+            document.getElementById('input-comment').value = row.Comments || '';
+
+            // Update Selected Button Styles
+            const btnYes = document.getElementById('btn-yes');
+            const btnNo = document.getElementById('btn-no');
+            
+            // Reset styles
+            btnYes.className = btnYes.className.replace(/ring-4 ring-emerald-500\/30 bg-emerald-50/g, 'bg-white');
+            btnNo.className = btnNo.className.replace(/ring-4 ring-rose-500\/30 bg-rose-50/g, 'bg-white');
+            
+            // Apply selected styling
+            if(row.Verified_Is_Correct === 'Yes') {
+                btnYes.className = btnYes.className.replace('bg-white', 'bg-emerald-50 ring-4 ring-emerald-500/30');
+            } else if (row.Verified_Is_Correct === 'No') {
+                btnNo.className = btnNo.className.replace('bg-white', 'bg-rose-50 ring-4 ring-rose-500/30');
+            }
+
+            // Update Navigation Buttons availability
+            const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
+            document.getElementById('btn-prev').disabled = currentIndexInView <= 0;
+            document.getElementById('btn-next').disabled = currentIndexInView >= currentViewIndices.length - 1;
+
+            switchView('detail');
+        }
+
+        // ==========================================
+        // SUBMISSION & NAVIGATION
+        // ==========================================
+        async function handleVote(isCorrect) {
+            if (activeDataIndex === -1 || isSubmitting) return;
+            
+            const row = allData[activeDataIndex];
+            const answerText = isCorrect ? 'Yes' : 'No';
+            const commentText = document.getElementById('input-comment').value.trim();
+
+            // Check if nothing actually changed (skip network call)
+            if (row.Verified_Is_Correct === answerText && (row.Comments || '') === commentText) {
+                goToNextOrDashboard();
+                return;
+            }
+
+            // Lock UI and show loading
+            isSubmitting = true;
+            const btn = isCorrect ? document.getElementById('btn-yes') : document.getElementById('btn-no');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-xl"></i><span class="text-xs uppercase tracking-wide">Saving...</span>`;
+            
+            // Pre-calculate next index before state changes affect filters
+            const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
+            let nextDataIndexToLoad = -1;
+            if (currentIndexInView >= 0 && currentIndexInView < currentViewIndices.length - 1) {
+                nextDataIndexToLoad = currentViewIndices[currentIndexInView + 1];
+            }
+
+            try {
+                // Post to Google Apps Script
+                await fetch(scriptUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        rowIndex: row._rowIndex,
+                        isCorrect: answerText,
+                        comment: commentText
+                    })
+                });
+
+                // Update Local Data State
+                row.Verified_Is_Correct = answerText;
+                row.Comments = commentText;
+                
+                // Navigate forward
+                if (nextDataIndexToLoad !== -1) {
+                    applyFilter(currentFilter); // Refreshes the list silently in the background
+                    openDetail(nextDataIndexToLoad);
+                } else {
+                    applyFilter(currentFilter);
+                    showToast("Reached the end of the list!", "success");
+                    switchView('dashboard');
+                }
+            } catch (error) {
+                console.error("Save failed:", error);
+                showToast("Failed to save to cloud. Try again.", "error");
+            } finally {
+                isSubmitting = false;
+                btn.innerHTML = originalHtml;
+            }
+        }
+
+        function goToNextOrDashboard() {
+            const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
+            if (currentIndexInView >= 0 && currentIndexInView < currentViewIndices.length - 1) {
+                openDetail(currentViewIndices[currentIndexInView + 1]);
+            } else {
+                switchView('dashboard');
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('btn-yes').addEventListener('click', () => handleVote(true));
+        document.getElementById('btn-no').addEventListener('click', () => handleVote(false));
+        
+        document.getElementById('btn-next').addEventListener('click', () => {
+            const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
+            if (currentIndexInView < currentViewIndices.length - 1) openDetail(currentViewIndices[currentIndexInView + 1]);
+        });
+        
+        document.getElementById('btn-prev').addEventListener('click', () => {
+            const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
+            if (currentIndexInView > 0) openDetail(currentViewIndices[currentIndexInView - 1]);
+        });
+
+        document.getElementById('btn-back').addEventListener('click', () => {
+            applyFilter(currentFilter); // Make sure list reflects any changes made in detail view
+            switchView('dashboard');
+        });
+
+        // ==========================================
+        // UTILITIES
+        // ==========================================
+        function switchView(viewName) {
+            document.getElementById('view-loading').classList.add('hidden');
+            document.getElementById('view-dashboard').classList.add('hidden');
+            document.getElementById('view-detail').classList.add('hidden');
+            
+            document.getElementById(`view-${viewName}`).classList.remove('hidden');
+            
+            const backBtn = document.getElementById('btn-back');
+            if (viewName === 'detail') {
+                backBtn.classList.remove('hidden');
+            } else {
+                backBtn.classList.add('hidden');
+            }
+        }
+
+        function escapeHTML(str) {
+            if (!str) return '';
+            return str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[tag]));
+        }
+
+        function showToast(message, type = 'info') {
+            const toastEl = document.getElementById('toast');
+            const toastIcon = document.getElementById('toast-icon');
+            document.getElementById('toast-message').innerText = message;
+            
+            if (type === 'success') toastIcon.className = 'fa-solid fa-circle-check text-emerald-400';
+            else if (type === 'error') toastIcon.className = 'fa-solid fa-circle-xmark text-rose-400';
+            else toastIcon.className = 'fa-solid fa-circle-info text-blue-400';
+
+            toastEl.style.transform = 'translateY(0)';
+            toastEl.style.opacity = '1';
+
+            setTimeout(() => {
+                toastEl.style.transform = 'translateY(-150%)';
+                toastEl.style.opacity = '0';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
