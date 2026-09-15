@@ -45,6 +45,10 @@
                 <span id="stats-completed" class="text-blue-600">0</span>
                 <span class="text-slate-400">/</span>
                 <span id="stats-total" class="text-slate-600">0</span>
+                <div class="w-px h-4 bg-slate-300 mx-1"></div>
+                <button id="btn-refresh" class="text-slate-500 hover:text-blue-600 transition-colors w-6 h-6 flex items-center justify-center rounded-full hover:bg-slate-200 active:scale-95" title="Refresh Latest Data">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
             </div>
         </div>
     </header>
@@ -139,7 +143,9 @@
         let currentViewIndices = []; // Array of allData indices matching current filter
         let activeDataIndex = -1;    // Currently open row in allData
         let isSubmitting = false;
-        const scriptUrl = 'https://script.google.com/macros/s/AKfycbyu8J74RpM6UzPvNIfFf6oEOhb4MwQbQHSpUfvBJuQ9n2ijzzGgImrKDU5ZNsSeyxskQA/exec';
+        
+        // Updated URL based on your latest link
+        const scriptUrl = 'https://script.google.com/macros/s/AKfycbzRNsb49MKLbYfBxVs9bKWTh81pYUVtbIkZtQAPd8wg6obA3tDJ2qCJxzBqE_Zg1nSYfg/exec';
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -153,11 +159,19 @@
         async function fetchDataFromSheet() {
             switchView('loading');
             try {
-                const response = await fetch(scriptUrl);
+                // Appending timestamp to force Google and browsers to serve fresh data
+                const urlWithCacheBuster = scriptUrl + "?t=" + new Date().getTime();
+                
+                const response = await fetch(urlWithCacheBuster, {
+                    method: 'GET',
+                    redirect: 'follow', // Vital for mobile browsers to follow Google's redirects
+                    cache: 'no-store'   // Strictly disable browser-level caching
+                });
+                
                 if (!response.ok) throw new Error("Failed to connect to backend");
                 
                 allData = await response.json();
-                applyFilter('all');
+                applyFilter(currentFilter);
                 switchView('dashboard');
             } catch (error) {
                 console.error(error);
@@ -409,6 +423,16 @@
         document.getElementById('btn-back').addEventListener('click', () => {
             applyFilter(currentFilter); // Make sure list reflects any changes made in detail view
             switchView('dashboard');
+        });
+
+        document.getElementById('btn-refresh').addEventListener('click', () => {
+            const icon = document.querySelector('#btn-refresh i');
+            icon.classList.add('fa-spin'); // Make icon spin while loading
+            
+            fetchDataFromSheet().finally(() => {
+                icon.classList.remove('fa-spin');
+                showToast("Data refreshed across devices!", "success");
+            });
         });
 
         // ==========================================
