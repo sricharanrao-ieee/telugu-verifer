@@ -28,13 +28,13 @@
         .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 h-[100dvh] w-screen overflow-hidden flex flex-col">
-    <header class="bg-white shadow-sm border-b border-slate-200 z-20 shrink-0">
-        <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <button id="btn-back" class="hidden text-slate-500 hover:text-slate-800 transition-colors mr-1 w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100">
-                    <i class="fa-solid fa-arrow-left text-lg"></i>
-                </button>
+<!-- Prevent body scrolling entirely and handle mobile bounds -->
+<body class="bg-slate-50 text-slate-800 overflow-hidden overscroll-none">
+    
+    <!-- Wrapper that perfectly locks to the absolute top/bottom of the visible window -->
+    <div class="fixed inset-0 w-full h-full flex flex-col overflow-hidden">
+        <header class="bg-white shadow-sm border-b border-slate-200 z-20 shrink-0">
+            <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
                 <div class="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center shrink-0">
                     <i class="fa-solid fa-language"></i>
                 </div>
@@ -87,22 +87,8 @@
                     <div id="detail-row" class="text-xs font-semibold text-slate-400 bg-slate-200 px-2 py-1 rounded"></div>
                 </div>
 
-                <!-- Fields Container -->
-                <div id="levels-container" class="space-y-3 mb-6">
-                    <!-- Dynamically populated fields -->
-                </div>
-
-                <!-- Comment Section -->
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-16">
-                    <label class="flex items-center gap-2 text-sm font-bold text-slate-600 mb-2">
-                        <i class="fa-regular fa-comment-dots text-slate-400"></i> Reviewer Comments
-                    </label>
-                    <textarea id="input-comment" rows="3" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-sm text-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-none" placeholder="Optional: Add notes about translation accuracy, grammar, or reasons for rejection..."></textarea>
-                </div>
-            </div>
-
-            <!-- Fixed Bottom Action Bar -->
-            <div class="bg-white border-t border-slate-200 p-4 shrink-0 flex items-center justify-between gap-3 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)] z-10 pb-safe">
+            <!-- Fixed Bottom Action Bar (Increased bottom padding for mobile safety) -->
+            <div class="bg-white border-t border-slate-200 px-4 pt-4 pb-8 shrink-0 flex items-center justify-between gap-3 shadow-[0_-10px_15px_-3px_rgb(0,0,0,0.05)] z-20 pb-safe">
                 <button id="btn-prev" class="w-12 h-12 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors shrink-0 active:scale-95 disabled:opacity-30 disabled:pointer-events-none">
                     <i class="fa-solid fa-chevron-left"></i>
                 </button>
@@ -124,6 +110,8 @@
             </div>
         </div>
     </main>
+    
+    </div> <!-- End of Fixed Screen Wrapper -->
 
     <!-- Toast Notification -->
     <div id="toast" class="fixed top-4 right-4 max-w-[90vw] bg-slate-800 text-white px-4 py-3 rounded-lg shadow-xl transform transition-all duration-300 translate-y-[-150%] opacity-0 z-50 flex items-center gap-3">
@@ -132,7 +120,8 @@
     </div>
 
     <style>
-        .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+        /* Forces an absolute minimum of 2rem (32px) padding at the bottom of the screen, or respects Apple's safe area */
+        .pb-safe { padding-bottom: max(2rem, env(safe-area-inset-bottom)); }
         textarea::placeholder { color: #94a3b8; }
     </style>
 
