@@ -210,66 +210,73 @@
         let currentReviewer = localStorage.getItem('reviewerName') || '';
         const scriptUrl = 'https://script.google.com/macros/s/AKfycbzRNsb49MKLbYfBxVs9bKWTh81pYUVtbIkZtQAPd8wg6obA3tDJ2qCJxzBqE_Zg1nSYfg/exec';
 
-        // --- TEXT TO SPEECH ENGINE ---
-        let availableVoices = [];
-        
-        function initVoices() {
-            availableVoices = window.speechSynthesis.getVoices();
-        }
-        
-        if ('speechSynthesis' in window) {
-            // Load voices (some browsers require a callback when voices are loaded)
-            window.speechSynthesis.onvoiceschanged = initVoices;
-            initVoices();
+        // --- GOOGLE TRANSLATE CLOUD TTS ENGINE (FREE) ---
+        let currentAudio = null;
+        let audioQueue = [];
+
+        function stopAudio() {
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+                currentAudio = null;
+            }
+            audioQueue = [];
+            // Reset all icons
+            document.querySelectorAll('.fa-volume-high').forEach(i => i.className = 'fa-solid fa-volume-low');
         }
 
         function playAudio(encodedText, langType, btnElement) {
-            if (!('speechSynthesis' in window)) {
-                showToast("Voice not supported on this device", "error");
-                return;
-            }
-
-            // Instantly stop any previous audio playing
-            window.speechSynthesis.cancel(); 
+            stopAudio(); // Instantly stop any previous audio playing
             
             const text = decodeURIComponent(encodedText);
-            const utterance = new SpeechSynthesisUtterance(text);
             
-            // Pace adjustments for a more natural, human-like feel
-            utterance.rate = 1.05; // Slightly faster to remove the robotic drag
-            utterance.pitch = 1.0; 
-
-            // Intelligent Voice Selection
-            let targetLang = 'en-US';
-            if (langType === 'telugu') targetLang = 'te-IN';
-            else if (langType === 'codemix') targetLang = 'te-IN'; // Indian engines handle codemix best
-
-            if (availableVoices.length > 0) {
-                // Prioritize Premium Google voices if installed (common on Android Chrome)
-                let selectedVoice = availableVoices.find(v => v.lang.startsWith(targetLang) && v.name.includes('Google'));
-                
-                // Fallback to default OS voice for that language
-                if (!selectedVoice) selectedVoice = availableVoices.find(v => v.lang.startsWith(targetLang));
-                
-                // Fallbacks if exact Telugu isn't available, try Indian English for codemix
-                if (!selectedVoice && (langType === 'codemix' || langType === 'telugu')) {
-                    selectedVoice = availableVoices.find(v => v.lang === 'en-IN');
-                }
-                
-                if (selectedVoice) utterance.voice = selectedVoice;
-            }
-
             // UI Feedback (Animating the speaker icon)
             const iconEl = btnElement.querySelector('i');
-            // Reset all other icons on the screen just in case
-            document.querySelectorAll('.fa-volume-high').forEach(i => i.className = 'fa-solid fa-volume-low');
-            
             iconEl.className = 'fa-solid fa-volume-high fa-beat text-blue-500';
 
-            utterance.onend = () => iconEl.className = 'fa-solid fa-volume-low';
-            utterance.onerror = () => iconEl.className = 'fa-solid fa-volume-low';
+            // Determine language code for Google Translate (te = Telugu, en = English)
+            let targetLang = (langType === 'telugu' || langType === 'codemix') ? 'te' : 'en';
 
-            window.speechSynthesis.speak(utterance);
+            // Google TTS limits text to ~150-200 characters per request.
+            // We split long sentences into a queue and play them back-to-back seamlessly.
+            const words = text.split(' ');
+            let currentChunk = "";
+            
+            words.forEach(word => {
+                if ((currentChunk + word).length > 150) {
+                    audioQueue.push(currentChunk.trim());
+                    currentChunk = word + " ";
+                } else {
+                    currentChunk += word + " ";
+                }
+            });
+            if (currentChunk.trim().length > 0) audioQueue.push(currentChunk.trim());
+            
+            playNextChunk(targetLang, iconEl);
+        }
+
+        function playNextChunk(lang, iconEl) {
+            if (audioQueue.length === 0) {
+                iconEl.className = 'fa-solid fa-volume-low'; // Reset icon when done
+                return;
+            }
+            
+            const textChunk = audioQueue.shift();
+            // Google Translate un-official TTS endpoint
+            const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(textChunk)}`;
+            
+            currentAudio = new Audio(url);
+            currentAudio.onended = () => playNextChunk(lang, iconEl); // Play next part when current finishes
+            currentAudio.onerror = () => {
+                iconEl.className = 'fa-solid fa-volume-low';
+                showToast("Network error playing audio.", "error");
+            };
+            
+            currentAudio.play().catch(e => {
+                console.error("Audio play error:", e);
+                iconEl.className = 'fa-solid fa-volume-low';
+                showToast("Please tap the screen first to allow audio.", "error");
+            });
         }
         // ------------------------------
 
@@ -280,7 +287,7 @@
             
             // Instantly load cached profiles so the UI feels fast
             loadCachedProfiles();
-            
+            a
             // Start loading data in the background instantly
             fetchDataFromSheetInBackground();
 
@@ -522,7 +529,7 @@
         function setupHistoryAPI() {
             history.replaceState({ view: 'dashboard' }, '', window.location.pathname);
             window.addEventListener('popstate', (event) => {
-                if ('speechSynthesis' in window) window.speechSynthesis.cancel(); // Stop audio on back swipe
+                stopAudio(); // Stop audio on back swipe
                 
                 if (!event.state || event.state.view === 'dashboard') {
                     applyFilter(currentFilter);
@@ -769,7 +776,7 @@
         }
 
         function goToNextOrDashboard() {
-            if ('speechSynthesis' in window) window.speechSynthesis.cancel(); // Mute when skipping
+            stopAudio(); // Mute when skipping
             
             const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
             if (currentIndexInView >= 0 && currentIndexInView < currentViewIndices.length - 1) {
@@ -787,18 +794,18 @@
         
         // Ensure physical back button mutes audio
         document.getElementById('btn-back').addEventListener('click', () => {
-            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            stopAudio();
             history.back();
         });
         
         document.getElementById('btn-next').addEventListener('click', () => {
-            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            stopAudio();
             const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
             if (currentIndexInView < currentViewIndices.length - 1) openDetail(currentViewIndices[currentIndexInView + 1]);
         });
         
         document.getElementById('btn-prev').addEventListener('click', () => {
-            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            stopAudio();
             const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
             if (currentIndexInView > 0) openDetail(currentViewIndices[currentIndexInView - 1]);
         });
