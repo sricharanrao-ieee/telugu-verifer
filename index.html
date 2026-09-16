@@ -2,14 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- Added viewport-fit=cover for perfect Google App WebView rendering -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Dataset Verifier</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <!-- Configure Tailwind for Dark Mode -->
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -35,13 +33,11 @@
         .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .dark .custom-scroll::-webkit-scrollbar-thumb { background: #475569; }
         
-        /* Safe Area Padding for mobile browsers */
-        .pb-safe { padding-bottom: max(1.5rem, env(safe-area-inset-bottom)); }
+        .pb-safe { padding-bottom: max(2rem, env(safe-area-inset-bottom)); }
         .pt-safe { padding-top: max(0.5rem, env(safe-area-inset-top)); }
     </style>
 </head>
 
-<!-- Initialize Dark Mode before body renders to prevent flash -->
 <script>
     if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
         document.documentElement.classList.add('dark');
@@ -50,18 +46,15 @@
     }
 </script>
 
-<!-- Add dark mode background colors to body -->
 <body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 overflow-hidden overscroll-none transition-colors duration-200">
     
-    <!-- Fixed absolute wrapper -->
     <div class="fixed inset-0 w-full h-full flex flex-col overflow-hidden">
         
         <!-- HEADER -->
-        <header class="bg-white dark:bg-slate-800 shadow-sm border-b border-slate-200 dark:border-slate-700 z-20 shrink-0 pt-safe transition-colors duration-200">
+        <header id="app-header" class="hidden bg-white dark:bg-slate-800 shadow-sm border-b border-slate-200 dark:border-slate-700 z-20 shrink-0 pt-safe transition-colors duration-200">
             <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
                 
                 <div class="flex items-center gap-3">
-                    <!-- Back Button (Only visible in Detail View) -->
                     <button id="btn-back" class="hidden w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors shrink-0">
                         <i class="fa-solid fa-arrow-left"></i>
                     </button>
@@ -69,11 +62,13 @@
                     <div class="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-lg flex items-center justify-center shrink-0">
                         <i class="fa-solid fa-language"></i>
                     </div>
-                    <h1 class="font-bold text-lg tracking-tight truncate hidden sm:block">Data Verifier</h1>
+                    <div class="flex flex-col hidden sm:flex">
+                        <h1 class="font-bold text-[15px] leading-tight tracking-tight truncate">Data Verifier</h1>
+                        <span id="header-user-name" class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">User</span>
+                    </div>
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <!-- Stats Badge -->
                     <div class="flex gap-2 text-sm font-medium items-center bg-slate-100 dark:bg-slate-900/50 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
                         <i class="fa-solid fa-chart-pie text-slate-400 dark:text-slate-500 mr-1"></i>
                         <span id="stats-completed" class="text-blue-600 dark:text-blue-400">0</span>
@@ -85,7 +80,10 @@
                         </button>
                     </div>
                     
-                    <!-- Theme Toggle Button -->
+                    <button id="btn-switch-user" class="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors active:scale-95" title="Switch User">
+                        <i class="fa-solid fa-user-gear"></i>
+                    </button>
+                    
                     <button id="btn-theme" class="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors active:scale-95">
                         <i class="fa-solid fa-moon dark:hidden"></i>
                         <i class="fa-solid fa-sun hidden dark:block"></i>
@@ -96,14 +94,40 @@
 
         <main class="flex-1 relative w-full h-full flex flex-col overflow-hidden max-w-4xl mx-auto">
             
-            <!-- SKELETON LOADING VIEW (Feels much faster than a spinner) -->
-            <div id="view-loading" class="absolute inset-0 z-10 bg-slate-50 dark:bg-slate-900 flex flex-col p-4 transition-colors duration-200">
+            <!-- LOGIN VIEW -->
+            <div id="view-login" class="absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 px-6 transition-colors duration-200">
+                <div class="w-full max-w-md bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 text-center">
+                    <div class="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl">
+                        <i class="fa-solid fa-user-check"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold mb-2">Welcome</h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Enter your name to track your progress separately from other reviewers.</p>
+                    
+                    <div class="mb-6 text-left">
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Your Name</label>
+                        <input type="text" id="input-reviewer-name" placeholder="e.g. John, Alice" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium">
+                    </div>
+
+                    <div id="existing-users-section" class="mb-6 text-left hidden">
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Or select existing profile</label>
+                        <div id="existing-users-list" class="flex flex-wrap gap-2">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                    
+                    <button id="btn-login" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all active:scale-95 flex justify-center items-center gap-2">
+                        <span>Continue</span> <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- SKELETON LOADING VIEW -->
+            <div id="view-loading" class="hidden absolute inset-0 z-10 bg-slate-50 dark:bg-slate-900 flex flex-col p-4 transition-colors duration-200 pt-[70px]">
                 <div class="flex gap-2 mb-4 border-b border-slate-200 dark:border-slate-800 pb-2">
                     <div class="h-8 w-24 bg-slate-200 dark:bg-slate-800 rounded-full animate-pulse"></div>
                     <div class="h-8 w-24 bg-slate-200 dark:bg-slate-800 rounded-full animate-pulse"></div>
                 </div>
                 <div class="flex flex-col gap-3">
-                    <div class="h-24 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 animate-pulse"></div>
                     <div class="h-24 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 animate-pulse"></div>
                     <div class="h-24 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 animate-pulse"></div>
                     <div class="h-24 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 animate-pulse"></div>
@@ -127,9 +151,7 @@
             <!-- DETAIL (REVIEW) VIEW -->
             <div id="view-detail" class="hidden absolute inset-0 z-0 flex flex-col bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
                 
-                <!-- Scrollable Content -->
                 <div class="flex-1 overflow-y-auto custom-scroll p-4 pb-12">
-                    
                     <div class="flex justify-between items-center mb-4">
                         <div id="detail-id" class="bg-slate-800 dark:bg-slate-700 text-white font-bold px-3 py-1.5 rounded-lg text-sm shadow-sm"></div>
                         <div id="detail-row" class="text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded"></div>
@@ -139,14 +161,12 @@
                         <!-- Populated dynamically -->
                     </div>
 
-                    <!-- Comment Section -->
-                    <div class="mt-6 mb-8">
+                    <div class="mt-6 mb-16">
                         <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2"><i class="fa-solid fa-comment mr-1"></i> Comments (Optional)</label>
-                        <textarea id="input-comment" rows="2" placeholder="Add any notes about this translation here..." class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 resize-none transition-colors duration-200"></textarea>
+                        <textarea id="input-comment" rows="2" placeholder="Add any notes..." class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none transition-colors duration-200"></textarea>
                     </div>
                 </div>
 
-                <!-- Fixed Bottom Action Bar -->
                 <div class="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-4 pt-4 shrink-0 flex items-center justify-between gap-3 shadow-[0_-10px_15px_-3px_rgb(0,0,0,0.05)] dark:shadow-[0_-10px_15px_-3px_rgb(0,0,0,0.2)] z-20 pb-safe transition-colors duration-200">
                     <button id="btn-prev" class="w-12 h-12 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 transition-colors shrink-0 active:scale-95 disabled:opacity-30 disabled:pointer-events-none">
                         <i class="fa-solid fa-chevron-left"></i>
@@ -171,7 +191,6 @@
         </main>
     </div>
 
-    <!-- Toast Notification -->
     <div id="toast" class="fixed top-4 right-4 max-w-[90vw] bg-slate-800 dark:bg-slate-700 text-white px-4 py-3 rounded-lg shadow-xl transform transition-all duration-300 translate-y-[-150%] opacity-0 z-50 flex items-center gap-3">
         <i id="toast-icon" class="fa-solid fa-circle-info"></i>
         <span id="toast-message" class="text-sm font-medium">Message</span>
@@ -183,17 +202,145 @@
         let currentViewIndices = []; 
         let activeDataIndex = -1;    
         let isSubmitting = false;
+        let isDataLoaded = false;
         
-        // Target Google Script URL
-        const scriptUrl = 'https://script.google.com/macros/s/AKfycbzRNsb49MKLbYfBxVs9bKWTh81pYUVtbIkZtQAPd8wg6obA3tDJ2qCJxzBqE_Zg1nSYfg/exec';
+        let currentReviewer = localStorage.getItem('reviewerName') || '';
+        let verifyColKey = '';
+        let commentColKey = '';
+        
+        const scriptUrl = 'https://script.google.com/macros/s/AKfycby8vCBVmtxtkZeW1eVxdmpUTghSv04JNHnWQK0FVHscqrMe_lSm1Rj_gtBB_RNrRsOGiw/exec';
 
-        // Initialize App
         document.addEventListener('DOMContentLoaded', () => {
             setupThemeToggle();
             setupTabListeners();
             setupHistoryAPI();
-            fetchDataFromSheet();
+            
+            // Start loading data in the background instantly
+            fetchDataFromSheetInBackground();
+
+            if (currentReviewer) {
+                // User already logged in previously
+                setupReviewerKeys(currentReviewer);
+                document.getElementById('view-login').classList.add('hidden');
+                
+                if (isDataLoaded) {
+                    proceedToDashboard();
+                } else {
+                    document.getElementById('app-header').classList.remove('hidden');
+                    document.getElementById('view-loading').classList.remove('hidden');
+                }
+            }
+            
+            // Login Handlers
+            document.getElementById('btn-login').addEventListener('click', handleLogin);
+            document.getElementById('input-reviewer-name').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleLogin();
+            });
+            
+            document.getElementById('btn-switch-user').addEventListener('click', () => {
+                localStorage.removeItem('reviewerName');
+                currentReviewer = '';
+                location.reload(); // Quickest way to reset state safely
+            });
         });
+
+        function setupReviewerKeys(name) {
+            const safeName = name.replace(/[^a-zA-Z0-9]/g, '_');
+            verifyColKey = safeName + '_Verified';
+            commentColKey = safeName + '_Comments';
+            
+            document.getElementById('header-user-name').innerText = name;
+            
+            // Re-apply filter based on this specific user's column
+            if (isDataLoaded) applyFilter(currentFilter);
+        }
+
+        function handleLogin() {
+            const name = document.getElementById('input-reviewer-name').value.trim();
+            if(!name) {
+                showToast("Please enter a name", "error");
+                return;
+            }
+            
+            currentReviewer = name;
+            localStorage.setItem('reviewerName', currentReviewer);
+            setupReviewerKeys(currentReviewer);
+            
+            document.getElementById('view-login').classList.add('hidden');
+            document.getElementById('app-header').classList.remove('hidden');
+            
+            if (isDataLoaded) {
+                proceedToDashboard();
+            } else {
+                document.getElementById('view-loading').classList.remove('hidden');
+            }
+        }
+
+        function loginAsExistingUser(name) {
+            document.getElementById('input-reviewer-name').value = name;
+            handleLogin();
+        }
+
+        async function fetchDataFromSheetInBackground() {
+            try {
+                const urlWithCacheBuster = scriptUrl + "?t=" + new Date().getTime();
+                const response = await fetch(urlWithCacheBuster, {
+                    method: 'GET',
+                    redirect: 'follow', 
+                    cache: 'no-store'   
+                });
+                
+                if (!response.ok) throw new Error("Failed to connect");
+                
+                allData = await response.json();
+                isDataLoaded = true;
+                
+                extractExistingReviewers();
+                
+                // If user is already past the login screen, populate dashboard
+                if (currentReviewer && !document.getElementById('app-header').classList.contains('hidden')) {
+                    proceedToDashboard();
+                }
+            } catch (error) {
+                console.error(error);
+                showToast("Failed to load data. Check connection.", 'error');
+            }
+        }
+
+        function extractExistingReviewers() {
+            if (allData.length === 0) return;
+            
+            const keys = Object.keys(allData[0]);
+            const existingUsers = [];
+            
+            keys.forEach(key => {
+                if (key.endsWith('_Verified')) {
+                    const name = key.replace('_Verified', '');
+                    if(name !== 'Verified_Is_Correct') { // Ignore the old legacy column
+                        existingUsers.push(name.replace(/_/g, ' '));
+                    }
+                }
+            });
+
+            if (existingUsers.length > 0) {
+                document.getElementById('existing-users-section').classList.remove('hidden');
+                const list = document.getElementById('existing-users-list');
+                list.innerHTML = '';
+                existingUsers.forEach(user => {
+                    const btn = document.createElement('button');
+                    btn.className = "bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-600";
+                    btn.innerText = user;
+                    btn.onclick = () => loginAsExistingUser(user);
+                    list.appendChild(btn);
+                });
+            }
+        }
+
+        function proceedToDashboard() {
+            document.getElementById('view-loading').classList.add('hidden');
+            document.getElementById('view-dashboard').classList.remove('hidden');
+            applyFilter(currentFilter);
+        }
 
         // ==========================================
         // THEME & BROWSER HISTORY LOGIC
@@ -212,57 +359,17 @@
             });
         }
 
-        // Handles Mobile Back Button
         function setupHistoryAPI() {
-            // Replace initial state so we have a base
             history.replaceState({ view: 'dashboard' }, '', window.location.pathname);
-
-            // Listen for system back button
             window.addEventListener('popstate', (event) => {
                 if (!event.state || event.state.view === 'dashboard') {
-                    // Force UI back to dashboard
                     applyFilter(currentFilter);
                     document.getElementById('view-detail').classList.add('hidden');
                     document.getElementById('view-dashboard').classList.remove('hidden');
                     document.getElementById('btn-back').classList.add('hidden');
-                } else if (event.state.view === 'detail') {
-                    // Do nothing, let them stay in detail
                 }
             });
-
-            // On-screen back button
-            document.getElementById('btn-back').addEventListener('click', () => {
-                history.back(); // Triggers the popstate event above natively
-            });
-        }
-
-        // ==========================================
-        // DATA FETCHING
-        // ==========================================
-        async function fetchDataFromSheet() {
-            // Loading handled by skeleton now
-            document.getElementById('view-loading').classList.remove('hidden');
-            document.getElementById('view-dashboard').classList.add('hidden');
-            
-            try {
-                const urlWithCacheBuster = scriptUrl + "?t=" + new Date().getTime();
-                const response = await fetch(urlWithCacheBuster, {
-                    method: 'GET',
-                    redirect: 'follow', 
-                    cache: 'no-store'   
-                });
-                
-                if (!response.ok) throw new Error("Failed to connect");
-                
-                allData = await response.json();
-                applyFilter(currentFilter);
-                
-                document.getElementById('view-loading').classList.add('hidden');
-                document.getElementById('view-dashboard').classList.remove('hidden');
-            } catch (error) {
-                console.error(error);
-                showToast("Failed to load data. Check connection.", 'error');
-            }
+            document.getElementById('btn-back').addEventListener('click', () => history.back());
         }
 
         // ==========================================
@@ -295,7 +402,10 @@
             let hasItems = false;
 
             allData.forEach((row, index) => {
-                const isVerified = !!row.Verified_Is_Correct;
+                // Use the specific user's verification column
+                const userAnswer = row[verifyColKey];
+                const isVerified = !!userAnswer;
+                
                 if (filter === 'pending' && isVerified) return;
                 if (filter === 'verified' && !isVerified) return;
                 
@@ -306,19 +416,21 @@
                 el.className = "bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-start gap-3 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-all active:scale-[0.99]";
                 
                 let iconHtml = '<i class="fa-regular fa-circle text-slate-300 dark:text-slate-600 text-xl"></i>';
-                if (row.Verified_Is_Correct === 'Yes') iconHtml = '<i class="fa-solid fa-circle-check text-emerald-500 text-xl"></i>';
-                if (row.Verified_Is_Correct === 'No') iconHtml = '<i class="fa-solid fa-circle-xmark text-rose-500 text-xl"></i>';
+                if (userAnswer === 'Yes') iconHtml = '<i class="fa-solid fa-circle-check text-emerald-500 text-xl"></i>';
+                if (userAnswer === 'No') iconHtml = '<i class="fa-solid fa-circle-xmark text-rose-500 text-xl"></i>';
 
                 const idLabel = escapeHTML(row.ID || `Row ${row._rowIndex}`);
                 const previewTitle = escapeHTML(row.Original_English || 'No original text available');
                 const previewSubtitle = escapeHTML(row.Level_100_Telugu || 'No translation available');
+                
+                const hasComment = !!row[commentColKey];
                 
                 el.innerHTML = `
                     <div class="mt-0.5 shrink-0 flex items-center justify-center w-6 h-6">${iconHtml}</div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center justify-between mb-1">
                             <span class="text-[11px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded tracking-wide">${idLabel}</span>
-                            ${row.Comments ? '<i class="fa-solid fa-comment text-blue-400 text-xs"></i>' : ''}
+                            ${hasComment ? '<i class="fa-solid fa-comment text-blue-400 text-xs"></i>' : ''}
                         </div>
                         <p class="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">${previewTitle}</p>
                         <p class="text-xs text-slate-500 dark:text-slate-400 truncate mt-1">${previewSubtitle}</p>
@@ -343,7 +455,7 @@
 
         function updateStats() {
             const total = allData.length;
-            const completed = allData.filter(r => !!r.Verified_Is_Correct).length;
+            const completed = allData.filter(r => !!r[verifyColKey]).length;
             document.getElementById('stats-completed').innerText = completed;
             document.getElementById('stats-total').innerText = total;
         }
@@ -355,7 +467,6 @@
             activeDataIndex = dataIndex;
             const row = allData[dataIndex];
             
-            // Register state in history for mobile back button
             if (history.state?.view !== 'detail') {
                 history.pushState({ view: 'detail', id: dataIndex }, '', '#review');
             }
@@ -366,7 +477,6 @@
             const levelsContainer = document.getElementById('levels-container');
             levelsContainer.innerHTML = '';
             
-            // Dynamic card styling that respects dark mode
             const fieldConfig = [
                 { key: 'Original_English', label: 'Original English', style: 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800' },
                 { key: 'Level_0_English', label: 'Level 0 (English)', style: 'border-blue-400 bg-blue-50/40 dark:bg-blue-900/10' },
@@ -387,19 +497,19 @@
                 }
             });
 
-            document.getElementById('input-comment').value = row.Comments || '';
+            // Load specific user's comment
+            document.getElementById('input-comment').value = row[commentColKey] || '';
 
-            // Update Selection UI
             const btnYes = document.getElementById('btn-yes');
             const btnNo = document.getElementById('btn-no');
             
-            // Reset styles specifically accounting for dark mode classes
             btnYes.className = btnYes.className.replace(/ring-4 ring-emerald-500\/30 bg-emerald-50 dark:bg-emerald-900\/30/g, 'bg-white dark:bg-slate-800');
             btnNo.className = btnNo.className.replace(/ring-4 ring-rose-500\/30 bg-rose-50 dark:bg-rose-900\/30/g, 'bg-white dark:bg-slate-800');
             
-            if(row.Verified_Is_Correct === 'Yes') {
+            // Check specific user's verification status
+            if(row[verifyColKey] === 'Yes') {
                 btnYes.className = btnYes.className.replace('bg-white dark:bg-slate-800', 'bg-emerald-50 dark:bg-emerald-900/30 ring-4 ring-emerald-500/30');
-            } else if (row.Verified_Is_Correct === 'No') {
+            } else if (row[verifyColKey] === 'No') {
                 btnNo.className = btnNo.className.replace('bg-white dark:bg-slate-800', 'bg-rose-50 dark:bg-rose-900/30 ring-4 ring-rose-500/30');
             }
 
@@ -407,12 +517,10 @@
             document.getElementById('btn-prev').disabled = currentIndexInView <= 0;
             document.getElementById('btn-next').disabled = currentIndexInView >= currentViewIndices.length - 1;
 
-            // View Management
             document.getElementById('view-dashboard').classList.add('hidden');
             document.getElementById('view-detail').classList.remove('hidden');
             document.getElementById('btn-back').classList.remove('hidden');
             
-            // Scroll to top of review screen
             document.querySelector('#view-detail > div').scrollTop = 0;
         }
 
@@ -426,7 +534,7 @@
             const answerText = isCorrect ? 'Yes' : 'No';
             const commentText = document.getElementById('input-comment').value.trim();
 
-            if (row.Verified_Is_Correct === answerText && (row.Comments || '') === commentText) {
+            if (row[verifyColKey] === answerText && (row[commentColKey] || '') === commentText) {
                 goToNextOrDashboard();
                 return;
             }
@@ -449,19 +557,21 @@
                     body: JSON.stringify({
                         rowIndex: row._rowIndex,
                         isCorrect: answerText,
-                        comment: commentText
+                        comment: commentText,
+                        reviewerName: currentReviewer // Pass name to backend
                     })
                 });
 
-                row.Verified_Is_Correct = answerText;
-                row.Comments = commentText;
+                // Update local data optimistically
+                row[verifyColKey] = answerText;
+                row[commentColKey] = commentText;
                 
                 if (nextDataIndexToLoad !== -1) {
                     applyFilter(currentFilter); 
-                    openDetail(nextDataIndexToLoad); // Will update history automatically
+                    openDetail(nextDataIndexToLoad); 
                 } else {
                     showToast("Reached the end of the list!", "success");
-                    history.back(); // Use history.back() to go to dashboard cleanly
+                    history.back(); 
                 }
             } catch (error) {
                 console.error("Save failed:", error);
@@ -500,7 +610,10 @@
         document.getElementById('btn-refresh').addEventListener('click', () => {
             const icon = document.querySelector('#btn-refresh i');
             icon.classList.add('fa-spin'); 
-            fetchDataFromSheet().finally(() => {
+            document.getElementById('view-loading').classList.remove('hidden');
+            document.getElementById('view-dashboard').classList.add('hidden');
+            
+            fetchDataFromSheetInBackground().finally(() => {
                 icon.classList.remove('fa-spin');
                 showToast("Data synced!", "success");
             });
