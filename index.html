@@ -625,7 +625,8 @@
         // SAVING DATA
         // ==========================================
         function handleVote(isCorrect) {
-            if (activeDataIndex === -1) return;
+            // Prevent double-clicking while it is already processing
+            if (activeDataIndex === -1 || isSubmitting) return;
             
             const row = allData[activeDataIndex];
             const answerText = isCorrect ? 'Yes' : 'No';
@@ -637,28 +638,15 @@
                 return;
             }
 
-            // 1. OPTIMISTIC UPDATE: Update data instantly in the browser memory
-            row[verifyColKey] = answerText;
-            row[commentColKey] = commentText;
+            // --- UI FEEDBACK (Micro-interaction) ---
+            isSubmitting = true;
+            const targetBtn = isCorrect ? document.getElementById('btn-yes') : document.getElementById('btn-no');
+            const originalHtml = targetBtn.innerHTML;
+
+            // Change button to show a satisfying "Saved" spinner
+            targetBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-xl"></i> <span class="text-xs uppercase tracking-wide">Saved</span>`;
             
-            // Calculate what the next row should be BEFORE we update the list
-            const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
-            let nextDataIndexToLoad = -1;
-            if (currentIndexInView >= 0 && currentIndexInView < currentViewIndices.length - 1) {
-                nextDataIndexToLoad = currentViewIndices[currentIndexInView + 1];
-            }
-
-            // 2. FAST UI NAVIGATION: Move immediately to the next screen (Zero lag)
-            if (nextDataIndexToLoad !== -1) {
-                applyFilter(currentFilter); 
-                openDetail(nextDataIndexToLoad); 
-            } else {
-                applyFilter(currentFilter);
-                showToast("Reached the end of the list!", "success");
-                history.back(); 
-            }
-
-            // 3. BACKGROUND SYNC: Send to Google Sheets silently without making the user wait
+            // 1. BACKGROUND SYNC: Send to Google Sheets instantly so we don't lose time
             fetch(scriptUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -672,6 +660,34 @@
                 console.error("Save failed:", error);
                 showToast(`Failed to sync row ${row._rowIndex} to cloud. Check internet.`, "error");
             });
+
+            // 2. DELAYED TRANSITION: Wait just 400ms so the user registers the save action
+            setTimeout(() => {
+                // Restore the button back to normal
+                targetBtn.innerHTML = originalHtml;
+                isSubmitting = false;
+
+                // OPTIMISTIC UPDATE: Update data in the browser memory
+                row[verifyColKey] = answerText;
+                row[commentColKey] = commentText;
+                
+                // Calculate what the next row should be BEFORE we update the list
+                const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
+                let nextDataIndexToLoad = -1;
+                if (currentIndexInView >= 0 && currentIndexInView < currentViewIndices.length - 1) {
+                    nextDataIndexToLoad = currentViewIndices[currentIndexInView + 1];
+                }
+
+                // FAST UI NAVIGATION: Move immediately to the next screen
+                if (nextDataIndexToLoad !== -1) {
+                    applyFilter(currentFilter); 
+                    openDetail(nextDataIndexToLoad); 
+                } else {
+                    applyFilter(currentFilter);
+                    showToast("Reached the end of the list!", "success");
+                    history.back(); 
+                }
+            }, 400); // 400ms delay for perfect UI feel
         }
 
         function goToNextOrDashboard() {
