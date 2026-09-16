@@ -111,9 +111,10 @@
                     <div id="existing-users-section" class="mb-6 text-left">
                         <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Or select existing profile</label>
                         <div id="existing-users-list" class="flex flex-wrap gap-2">
-                            <div class="flex items-center gap-2 text-sm text-slate-400 dark:text-slate-500 py-1 italic">
-                                <i class="fa-solid fa-spinner fa-spin"></i> Loading profiles...
-                            </div>
+                            <!-- Skeleton Loader for Profile Buttons -->
+                            <div class="h-8 w-20 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse"></div>
+                            <div class="h-8 w-24 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse"></div>
+                            <div class="h-8 w-16 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse"></div>
                         </div>
                     </div>
                     
@@ -207,15 +208,15 @@
         let isDataLoaded = false;
         
         let currentReviewer = localStorage.getItem('reviewerName') || '';
-        let verifyColKey = '';
-        let commentColKey = '';
-        
-        const scriptUrl = 'https://script.google.com/macros/s/AKfycby8vCBVmtxtkZeW1eVxdmpUTghSv04JNHnWQK0FVHscqrMe_lSm1Rj_gtBB_RNrRsOGiw/exec';
+        const scriptUrl = 'https://script.google.com/macros/s/AKfycbzRNsb49MKLbYfBxVs9bKWTh81pYUVtbIkZtQAPd8wg6obA3tDJ2qCJxzBqE_Zg1nSYfg/exec';
 
         document.addEventListener('DOMContentLoaded', () => {
             setupThemeToggle();
             setupTabListeners();
             setupHistoryAPI();
+            
+            // Instantly load cached profiles so the UI feels fast
+            loadCachedProfiles();
             
             // Start loading data in the background instantly
             fetchDataFromSheetInBackground();
@@ -306,19 +307,27 @@
             } catch (error) {
                 console.error(error);
                 showToast("Failed to load data. Check connection.", 'error');
-                const list = document.getElementById('existing-users-list');
-                if (list) {
-                    list.innerHTML = '<span class="text-sm text-rose-500 dark:text-rose-400 italic">Failed to load profiles. Please manually type your name.</span>';
+                
+                // Only show error text if we don't have cached profiles showing
+                if (!localStorage.getItem('cachedProfiles')) {
+                    const list = document.getElementById('existing-users-list');
+                    if (list) {
+                        list.innerHTML = '<span class="text-sm text-rose-500 dark:text-rose-400 italic">Failed to load profiles. Please manually type your name.</span>';
+                    }
                 }
             }
         }
 
-        function extractExistingReviewers() {
-            const list = document.getElementById('existing-users-list');
-            list.innerHTML = '';
+        function loadCachedProfiles() {
+            const cached = localStorage.getItem('cachedProfiles');
+            if (cached) {
+                renderUserButtons(JSON.parse(cached));
+            }
+        }
 
+        function extractExistingReviewers() {
             if (allData.length === 0) {
-                list.innerHTML = '<span class="text-sm text-slate-400 italic">No existing profiles found.</span>';
+                renderUserButtons([]);
                 return;
             }
             
@@ -334,10 +343,24 @@
                 }
             });
 
+            // Cache the users so next time the app opens, they appear instantly
             if (existingUsers.length > 0) {
-                existingUsers.forEach(user => {
+                localStorage.setItem('cachedProfiles', JSON.stringify(existingUsers));
+            }
+            
+            renderUserButtons(existingUsers);
+        }
+
+        function renderUserButtons(users) {
+            const list = document.getElementById('existing-users-list');
+            if (!list) return;
+            
+            list.innerHTML = '';
+
+            if (users.length > 0) {
+                users.forEach(user => {
                     const btn = document.createElement('button');
-                    btn.className = "bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-600 flex items-center gap-2";
+                    btn.className = "bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 border border-slate-200 dark:border-slate-600 flex items-center gap-2 active:scale-95 shadow-sm";
                     btn.innerHTML = `<span>${user}</span>`;
                     btn.onclick = (e) => loginAsExistingUser(user, e.currentTarget);
                     list.appendChild(btn);
