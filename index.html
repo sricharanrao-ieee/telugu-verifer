@@ -101,17 +101,19 @@
                         <i class="fa-solid fa-user-check"></i>
                     </div>
                     <h2 class="text-2xl font-bold mb-2">Welcome</h2>
-                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Enter your name to track your progress separately from other reviewers.</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Enter your name to track your progress separately.</p>
                     
                     <div class="mb-6 text-left">
                         <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Your Name</label>
                         <input type="text" id="input-reviewer-name" placeholder="e.g. John, Alice" class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium">
                     </div>
 
-                    <div id="existing-users-section" class="mb-6 text-left hidden">
+                    <div id="existing-users-section" class="mb-6 text-left">
                         <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Or select existing profile</label>
                         <div id="existing-users-list" class="flex flex-wrap gap-2">
-                            <!-- Populated dynamically -->
+                            <div class="flex items-center gap-2 text-sm text-slate-400 dark:text-slate-500 py-1 italic">
+                                <i class="fa-solid fa-spinner fa-spin"></i> Loading profiles...
+                            </div>
                         </div>
                     </div>
                     
@@ -232,7 +234,7 @@
             }
             
             // Login Handlers
-            document.getElementById('btn-login').addEventListener('click', handleLogin);
+            document.getElementById('btn-login').addEventListener('click', (e) => handleLogin(e));
             document.getElementById('input-reviewer-name').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') handleLogin();
             });
@@ -304,11 +306,21 @@
             } catch (error) {
                 console.error(error);
                 showToast("Failed to load data. Check connection.", 'error');
+                const list = document.getElementById('existing-users-list');
+                if (list) {
+                    list.innerHTML = '<span class="text-sm text-rose-500 dark:text-rose-400 italic">Failed to load profiles. Please manually type your name.</span>';
+                }
             }
         }
 
         function extractExistingReviewers() {
-            if (allData.length === 0) return;
+            const list = document.getElementById('existing-users-list');
+            list.innerHTML = '';
+
+            if (allData.length === 0) {
+                list.innerHTML = '<span class="text-sm text-slate-400 italic">No existing profiles found.</span>';
+                return;
+            }
             
             const keys = Object.keys(allData[0]);
             const existingUsers = [];
@@ -323,17 +335,79 @@
             });
 
             if (existingUsers.length > 0) {
-                document.getElementById('existing-users-section').classList.remove('hidden');
-                const list = document.getElementById('existing-users-list');
-                list.innerHTML = '';
                 existingUsers.forEach(user => {
                     const btn = document.createElement('button');
-                    btn.className = "bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-600";
-                    btn.innerText = user;
-                    btn.onclick = () => loginAsExistingUser(user);
+                    btn.className = "bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-600 flex items-center gap-2";
+                    btn.innerHTML = `<span>${user}</span>`;
+                    btn.onclick = (e) => loginAsExistingUser(user, e.currentTarget);
                     list.appendChild(btn);
                 });
+            } else {
+                list.innerHTML = '<span class="text-sm text-slate-400 italic">No existing profiles found.</span>';
             }
+        }
+
+        function loginAsExistingUser(name, btnElement) {
+            document.getElementById('input-reviewer-name').value = name;
+            
+            if (btnElement) {
+                const originalContent = btnElement.innerHTML;
+                btnElement.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Loading...`;
+                btnElement.classList.add('opacity-70', 'pointer-events-none');
+                
+                setTimeout(() => {
+                    handleLogin();
+                    // Reset button state just in case user logs out and returns
+                    setTimeout(() => {
+                        btnElement.innerHTML = originalContent;
+                        btnElement.classList.remove('opacity-70', 'pointer-events-none');
+                    }, 500);
+                }, 400); // Added a UX delay so the user sees the loading state
+            } else {
+                handleLogin();
+            }
+        }
+
+        function handleLogin(e) {
+            const name = document.getElementById('input-reviewer-name').value.trim();
+            if(!name) {
+                showToast("Please enter a name", "error");
+                return;
+            }
+            
+            // Handle loading state for main "Continue" button
+            const mainBtn = document.getElementById('btn-login');
+            let isMainClick = false;
+            let originalBtnHtml = "";
+            
+            if (e && e.currentTarget === mainBtn) {
+                isMainClick = true;
+                originalBtnHtml = mainBtn.innerHTML;
+                mainBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Setting up...</span>`;
+                mainBtn.classList.add('opacity-80', 'pointer-events-none');
+            }
+            
+            setTimeout(() => {
+                currentReviewer = name;
+                localStorage.setItem('reviewerName', currentReviewer);
+                setupReviewerKeys(currentReviewer);
+                
+                document.getElementById('view-login').classList.add('hidden');
+                document.getElementById('app-header').classList.remove('hidden');
+                
+                if (isDataLoaded) {
+                    proceedToDashboard();
+                } else {
+                    document.getElementById('view-loading').classList.remove('hidden');
+                }
+
+                if (isMainClick) {
+                    setTimeout(() => {
+                        mainBtn.innerHTML = originalBtnHtml;
+                        mainBtn.classList.remove('opacity-80', 'pointer-events-none');
+                    }, 500);
+                }
+            }, 400); // Add a 400ms delay to make it feel like proper authentication
         }
 
         function proceedToDashboard() {
