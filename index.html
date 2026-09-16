@@ -287,8 +287,18 @@
             
             // Instantly load cached profiles so the UI feels fast
             loadCachedProfiles();
-            a
-            // Start loading data in the background instantly
+            
+            const cachedData = localStorage.getItem('cachedSheetData');
+            if (cachedData) {
+                try {
+                    allData = JSON.parse(cachedData);
+                    isDataLoaded = true;
+                } catch(e) {
+                    console.error("Cache parsing error", e);
+                }
+            }
+
+            // Start loading fresh data in the background instantly
             fetchDataFromSheetInBackground();
 
             if (currentReviewer) {
@@ -297,6 +307,7 @@
                 document.getElementById('view-login').classList.add('hidden');
                 
                 if (isDataLoaded) {
+                    document.getElementById('app-header').classList.remove('hidden');
                     proceedToDashboard();
                 } else {
                     document.getElementById('app-header').classList.remove('hidden');
@@ -365,25 +376,34 @@
                 
                 if (!response.ok) throw new Error("Failed to connect");
                 
-                allData = await response.json();
+                const freshData = await response.json();
+                allData = freshData;
                 isDataLoaded = true;
+                
+                // Cache the full data for instant loading next time
+                localStorage.setItem('cachedSheetData', JSON.stringify(allData));
                 
                 extractExistingReviewers();
                 
-                // If user is already past the login screen, populate dashboard
-                if (currentReviewer && !document.getElementById('app-header').classList.contains('hidden')) {
+                // If the user is on the dashboard, quietly refresh the list with new data
+                if (currentReviewer && history.state?.view !== 'detail' && !document.getElementById('view-dashboard').classList.contains('hidden')) {
+                    applyFilter(currentFilter);
+                } else if (currentReviewer && !document.getElementById('app-header').classList.contains('hidden') && document.getElementById('view-dashboard').classList.contains('hidden') && history.state?.view !== 'detail') {
+                    // Transition from loading skeleton to dashboard if they were waiting
                     proceedToDashboard();
                 }
             } catch (error) {
                 console.error(error);
-                showToast("Failed to load data. Check connection.", 'error');
-                
-                // Only show error text if we don't have cached profiles showing
-                if (!localStorage.getItem('cachedProfiles')) {
-                    const list = document.getElementById('existing-users-list');
-                    if (list) {
-                        list.innerHTML = '<span class="text-sm text-rose-500 dark:text-rose-400 italic">Failed to load profiles. Please manually type your name.</span>';
+                if (!isDataLoaded) {
+                    // Only show error if we also have NO cached data
+                    showToast("Failed to connect to Google Sheets.", 'error');
+                    
+                    if (!localStorage.getItem('cachedProfiles')) {
+                        const list = document.getElementById('existing-users-list');
+                        if (list) list.innerHTML = '<span class="text-sm text-rose-500 dark:text-rose-400 italic">Failed to load profiles. Please manually type your name.</span>';
                     }
+                } else {
+                    console.log("Offline mode active. Using cached data.");
                 }
             }
         }
