@@ -208,7 +208,7 @@
         let isDataLoaded = false;
         
         let currentReviewer = localStorage.getItem('reviewerName') || '';
-        const scriptUrl = 'https://script.google.com/macros/s/AKfycbzRNsb49MKLbYfBxVs9bKWTh81pYUVtbIkZtQAPd8wg6obA3tDJ2qCJxzBqE_Zg1nSYfg/exec';
+        const scriptUrl = 'https://script.google.com/macros/s/AKfycbxoQkcys8zNg3ajWldDuv17TtzHx9d5oceDLDybwKCLLmDAs_mEZ8VkyQ9HrsU129nuNg/exec';
 
         document.addEventListener('DOMContentLoaded', () => {
             setupThemeToggle();
@@ -624,59 +624,54 @@
         // ==========================================
         // SAVING DATA
         // ==========================================
-        async function handleVote(isCorrect) {
-            if (activeDataIndex === -1 || isSubmitting) return;
+        function handleVote(isCorrect) {
+            if (activeDataIndex === -1) return;
             
             const row = allData[activeDataIndex];
             const answerText = isCorrect ? 'Yes' : 'No';
             const commentText = document.getElementById('input-comment').value.trim();
 
+            // If nothing changed, just move to the next
             if (row[verifyColKey] === answerText && (row[commentColKey] || '') === commentText) {
                 goToNextOrDashboard();
                 return;
             }
 
-            isSubmitting = true;
-            const btn = isCorrect ? document.getElementById('btn-yes') : document.getElementById('btn-no');
-            const originalHtml = btn.innerHTML;
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-xl"></i><span class="text-xs uppercase tracking-wide">Saving...</span>`;
+            // 1. OPTIMISTIC UPDATE: Update data instantly in the browser memory
+            row[verifyColKey] = answerText;
+            row[commentColKey] = commentText;
             
+            // Calculate what the next row should be BEFORE we update the list
             const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
             let nextDataIndexToLoad = -1;
             if (currentIndexInView >= 0 && currentIndexInView < currentViewIndices.length - 1) {
                 nextDataIndexToLoad = currentViewIndices[currentIndexInView + 1];
             }
 
-            try {
-                await fetch(scriptUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({
-                        rowIndex: row._rowIndex,
-                        isCorrect: answerText,
-                        comment: commentText,
-                        reviewerName: currentReviewer // Pass name to backend
-                    })
-                });
-
-                // Update local data optimistically
-                row[verifyColKey] = answerText;
-                row[commentColKey] = commentText;
-                
-                if (nextDataIndexToLoad !== -1) {
-                    applyFilter(currentFilter); 
-                    openDetail(nextDataIndexToLoad); 
-                } else {
-                    showToast("Reached the end of the list!", "success");
-                    history.back(); 
-                }
-            } catch (error) {
-                console.error("Save failed:", error);
-                showToast("Failed to save to cloud. Try again.", "error");
-            } finally {
-                isSubmitting = false;
-                btn.innerHTML = originalHtml;
+            // 2. FAST UI NAVIGATION: Move immediately to the next screen (Zero lag)
+            if (nextDataIndexToLoad !== -1) {
+                applyFilter(currentFilter); 
+                openDetail(nextDataIndexToLoad); 
+            } else {
+                applyFilter(currentFilter);
+                showToast("Reached the end of the list!", "success");
+                history.back(); 
             }
+
+            // 3. BACKGROUND SYNC: Send to Google Sheets silently without making the user wait
+            fetch(scriptUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    rowIndex: row._rowIndex,
+                    isCorrect: answerText,
+                    comment: commentText,
+                    reviewerName: currentReviewer // Pass name to backend
+                })
+            }).catch(error => {
+                console.error("Save failed:", error);
+                showToast(`Failed to sync row ${row._rowIndex} to cloud. Check internet.`, "error");
+            });
         }
 
         function goToNextOrDashboard() {
