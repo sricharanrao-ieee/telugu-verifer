@@ -208,7 +208,70 @@
         let isDataLoaded = false;
         
         let currentReviewer = localStorage.getItem('reviewerName') || '';
-        const scriptUrl = 'https://script.google.com/macros/s/AKfycbxoQkcys8zNg3ajWldDuv17TtzHx9d5oceDLDybwKCLLmDAs_mEZ8VkyQ9HrsU129nuNg/exec';
+        const scriptUrl = 'https://script.google.com/macros/s/AKfycbzRNsb49MKLbYfBxVs9bKWTh81pYUVtbIkZtQAPd8wg6obA3tDJ2qCJxzBqE_Zg1nSYfg/exec';
+
+        // --- TEXT TO SPEECH ENGINE ---
+        let availableVoices = [];
+        
+        function initVoices() {
+            availableVoices = window.speechSynthesis.getVoices();
+        }
+        
+        if ('speechSynthesis' in window) {
+            // Load voices (some browsers require a callback when voices are loaded)
+            window.speechSynthesis.onvoiceschanged = initVoices;
+            initVoices();
+        }
+
+        function playAudio(encodedText, langType, btnElement) {
+            if (!('speechSynthesis' in window)) {
+                showToast("Voice not supported on this device", "error");
+                return;
+            }
+
+            // Instantly stop any previous audio playing
+            window.speechSynthesis.cancel(); 
+            
+            const text = decodeURIComponent(encodedText);
+            const utterance = new SpeechSynthesisUtterance(text);
+            
+            // Pace adjustments for a more natural, human-like feel
+            utterance.rate = 1.05; // Slightly faster to remove the robotic drag
+            utterance.pitch = 1.0; 
+
+            // Intelligent Voice Selection
+            let targetLang = 'en-US';
+            if (langType === 'telugu') targetLang = 'te-IN';
+            else if (langType === 'codemix') targetLang = 'te-IN'; // Indian engines handle codemix best
+
+            if (availableVoices.length > 0) {
+                // Prioritize Premium Google voices if installed (common on Android Chrome)
+                let selectedVoice = availableVoices.find(v => v.lang.startsWith(targetLang) && v.name.includes('Google'));
+                
+                // Fallback to default OS voice for that language
+                if (!selectedVoice) selectedVoice = availableVoices.find(v => v.lang.startsWith(targetLang));
+                
+                // Fallbacks if exact Telugu isn't available, try Indian English for codemix
+                if (!selectedVoice && (langType === 'codemix' || langType === 'telugu')) {
+                    selectedVoice = availableVoices.find(v => v.lang === 'en-IN');
+                }
+                
+                if (selectedVoice) utterance.voice = selectedVoice;
+            }
+
+            // UI Feedback (Animating the speaker icon)
+            const iconEl = btnElement.querySelector('i');
+            // Reset all other icons on the screen just in case
+            document.querySelectorAll('.fa-volume-high').forEach(i => i.className = 'fa-solid fa-volume-low');
+            
+            iconEl.className = 'fa-solid fa-volume-high fa-beat text-blue-500';
+
+            utterance.onend = () => iconEl.className = 'fa-solid fa-volume-low';
+            utterance.onerror = () => iconEl.className = 'fa-solid fa-volume-low';
+
+            window.speechSynthesis.speak(utterance);
+        }
+        // ------------------------------
 
         document.addEventListener('DOMContentLoaded', () => {
             setupThemeToggle();
@@ -459,6 +522,8 @@
         function setupHistoryAPI() {
             history.replaceState({ view: 'dashboard' }, '', window.location.pathname);
             window.addEventListener('popstate', (event) => {
+                if ('speechSynthesis' in window) window.speechSynthesis.cancel(); // Stop audio on back swipe
+                
                 if (!event.state || event.state.view === 'dashboard') {
                     applyFilter(currentFilter);
                     document.getElementById('view-detail').classList.add('hidden');
@@ -585,10 +650,23 @@
 
             fieldConfig.forEach(item => {
                 if(row[item.key] !== undefined && row[item.key] !== "") {
+                    // Determine language for the voice bot
+                    let langType = 'en';
+                    if (item.key.includes('Telugu')) langType = 'telugu';
+                    else if (item.key.includes('CodeMix')) langType = 'codemix';
+                    
+                    // Safely encode the text so quotes don't break the HTML tags
+                    const safeText = encodeURIComponent(String(row[item.key]));
+
                     levelsContainer.innerHTML += `
                         <div class="border-l-4 ${item.style} rounded-r-xl p-3 shadow-sm border border-slate-200 dark:border-slate-700/50 border-l-[4px]">
-                            <div class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">${item.label}</div>
-                            <div class="text-sm sm:text-base text-slate-800 dark:text-slate-200 font-medium whitespace-pre-wrap">${escapeHTML(String(row[item.key]))}</div>
+                            <div class="flex justify-between items-start mb-1">
+                                <div class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-1">${item.label}</div>
+                                <button onclick="playAudio('${safeText}', '${langType}', this)" class="w-7 h-7 flex items-center justify-center rounded-full bg-black/5 dark:bg-white/5 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shrink-0 active:scale-95" title="Listen">
+                                    <i class="fa-solid fa-volume-low"></i>
+                                </button>
+                            </div>
+                            <div class="text-sm sm:text-base text-slate-800 dark:text-slate-200 font-medium whitespace-pre-wrap pr-2">${escapeHTML(String(row[item.key]))}</div>
                         </div>
                     `;
                 }
@@ -691,6 +769,8 @@
         }
 
         function goToNextOrDashboard() {
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel(); // Mute when skipping
+            
             const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
             if (currentIndexInView >= 0 && currentIndexInView < currentViewIndices.length - 1) {
                 openDetail(currentViewIndices[currentIndexInView + 1]);
@@ -705,12 +785,20 @@
         document.getElementById('btn-yes').addEventListener('click', () => handleVote(true));
         document.getElementById('btn-no').addEventListener('click', () => handleVote(false));
         
+        // Ensure physical back button mutes audio
+        document.getElementById('btn-back').addEventListener('click', () => {
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            history.back();
+        });
+        
         document.getElementById('btn-next').addEventListener('click', () => {
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
             const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
             if (currentIndexInView < currentViewIndices.length - 1) openDetail(currentViewIndices[currentIndexInView + 1]);
         });
         
         document.getElementById('btn-prev').addEventListener('click', () => {
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
             const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
             if (currentIndexInView > 0) openDetail(currentViewIndices[currentIndexInView - 1]);
         });
