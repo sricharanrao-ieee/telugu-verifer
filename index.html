@@ -200,588 +200,1792 @@
     </div>
 
     <script>
-        let allData = [];
-        let currentFilter = 'all'; 
-        let currentViewIndices = []; 
-        let activeDataIndex = -1;    
-        let isSubmitting = false;
-        let isDataLoaded = false;
-        
-        let currentReviewer = localStorage.getItem('reviewerName') || '';
-        const scriptUrl = 'https://script.google.com/macros/s/AKfycbzUsZA0Q1ILEAago1xMRsqcQEzY8YYIX0o16G7dNWIo9Ef20hWAwBvGBbOVtNikTSK5/exec';
+    // ============================================================
+    // DATASET VERIFIER
+    // ============================================================
 
-        document.addEventListener('DOMContentLoaded', () => {
-            setupThemeToggle();
-            setupTabListeners();
-            setupHistoryAPI();
-            
-            // Instantly load cached profiles so the UI feels fast
-            loadCachedProfiles();
-            
-            const cachedData = localStorage.getItem('cachedSheetData');
-            if (cachedData) {
-                try {
-                    allData = JSON.parse(cachedData);
+    let allData = [];
+    let currentFilter = 'all';
+    let currentViewIndices = [];
+    let activeDataIndex = -1;
+
+    let isSubmitting = false;
+    let isDataLoaded = false;
+
+    let currentReviewer = localStorage.getItem('reviewerName') || '';
+
+    let verifyColKey = '';
+    let commentColKey = '';
+
+    const scriptUrl =
+        'https://script.google.com/macros/s/AKfycbzUsZA0Q1ILEAago1xMRsqcQEzY8YYIX0o16G7dNWIo9Ef20hWAwBvGBbOVtNikTSK5/exec';
+
+
+    // ============================================================
+    // EXPECTED DATASET COLUMNS
+    // ============================================================
+
+    const DATASET_COLUMNS = [
+        'ID',
+        'Gold_Target',
+        'Level_0_English',
+        'Level_25_CodeMix',
+        'Level_50_CodeMix',
+        'Level_75_CodeMix',
+        'Level_100_Telugu'
+    ];
+
+
+    // ============================================================
+    // PAGE INITIALIZATION
+    // ============================================================
+
+    document.addEventListener('DOMContentLoaded', () => {
+
+        setupThemeToggle();
+        setupTabListeners();
+        setupHistoryAPI();
+
+        // Load cached reviewer profiles
+        loadCachedProfiles();
+
+        // Load cached dataset immediately
+        const cachedData = localStorage.getItem('cachedSheetData');
+
+        if (cachedData) {
+            try {
+                const parsed = JSON.parse(cachedData);
+
+                if (Array.isArray(parsed)) {
+                    allData = parsed;
                     isDataLoaded = true;
-                } catch(e) {
-                    console.error("Cache parsing error", e);
                 }
+
+            } catch (error) {
+                console.error('Cache parsing error:', error);
+                localStorage.removeItem('cachedSheetData');
             }
-
-            // Start loading fresh data in the background instantly
-            fetchDataFromSheetInBackground();
-
-            if (currentReviewer) {
-                // User already logged in previously
-                setupReviewerKeys(currentReviewer);
-                document.getElementById('view-login').classList.add('hidden');
-                
-                if (isDataLoaded) {
-                    document.getElementById('app-header').classList.remove('hidden');
-                    proceedToDashboard();
-                } else {
-                    document.getElementById('app-header').classList.remove('hidden');
-                    document.getElementById('view-loading').classList.remove('hidden');
-                }
-            }
-            
-            // Login Handlers
-            document.getElementById('btn-login').addEventListener('click', (e) => handleLogin(e));
-            document.getElementById('input-reviewer-name').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') handleLogin();
-            });
-            
-            document.getElementById('btn-switch-user').addEventListener('click', () => {
-                localStorage.removeItem('reviewerName');
-                currentReviewer = '';
-                location.reload(); // Quickest way to reset state safely
-            });
-        });
-
-        function setupReviewerKeys(name) {
-            const safeName = name.replace(/[^a-zA-Z0-9]/g, '_');
-            verifyColKey = safeName + '_Verified';
-            commentColKey = safeName + '_Comments';
-            
-            document.getElementById('header-user-name').innerText = name;
-            
-            // Re-apply filter based on this specific user's column
-            if (isDataLoaded) applyFilter(currentFilter);
         }
 
-        function handleLogin() {
-            const name = document.getElementById('input-reviewer-name').value.trim();
-            if(!name) {
-                showToast("Please enter a name", "error");
-                return;
-            }
-            
-            currentReviewer = name;
-            localStorage.setItem('reviewerName', currentReviewer);
+        // Always fetch latest Google Sheet data
+        fetchDataFromSheetInBackground();
+
+        // Restore previous reviewer
+        if (currentReviewer) {
+
             setupReviewerKeys(currentReviewer);
-            
-            document.getElementById('view-login').classList.add('hidden');
-            document.getElementById('app-header').classList.remove('hidden');
-            
+
+            document.getElementById('view-login')
+                .classList.add('hidden');
+
+            document.getElementById('app-header')
+                .classList.remove('hidden');
+
             if (isDataLoaded) {
                 proceedToDashboard();
             } else {
-                document.getElementById('view-loading').classList.remove('hidden');
+                document.getElementById('view-loading')
+                    .classList.remove('hidden');
             }
         }
 
-        function loginAsExistingUser(name) {
-            document.getElementById('input-reviewer-name').value = name;
-            handleLogin();
-        }
 
-        async function fetchDataFromSheetInBackground() {
-            try {
-                const urlWithCacheBuster = scriptUrl + "?t=" + new Date().getTime();
-                const response = await fetch(urlWithCacheBuster, {
-                    method: 'GET',
-                    redirect: 'follow', 
-                    cache: 'no-store'   
-                });
-                
-                if (!response.ok) throw new Error("Failed to connect");
-                
-                const freshData = await response.json();
-                allData = freshData;
-                isDataLoaded = true;
-                
-                // Cache the full data for instant loading next time
-                localStorage.setItem('cachedSheetData', JSON.stringify(allData));
-                
-                extractExistingReviewers();
-                
-                // If the user is on the dashboard, quietly refresh the list with new data
-                if (currentReviewer && history.state?.view !== 'detail' && !document.getElementById('view-dashboard').classList.contains('hidden')) {
-                    applyFilter(currentFilter);
-                } else if (currentReviewer && !document.getElementById('app-header').classList.contains('hidden') && document.getElementById('view-dashboard').classList.contains('hidden') && history.state?.view !== 'detail') {
-                    // Transition from loading skeleton to dashboard if they were waiting
-                    proceedToDashboard();
+        // Login button
+        document.getElementById('btn-login')
+            .addEventListener('click', handleLogin);
+
+
+        // Enter key login
+        document.getElementById('input-reviewer-name')
+            .addEventListener('keypress', (event) => {
+
+                if (event.key === 'Enter') {
+                    handleLogin();
                 }
-            } catch (error) {
-                console.error(error);
-                if (!isDataLoaded) {
-                    // Only show error if we also have NO cached data
-                    showToast("Failed to connect to Google Sheets.", 'error');
-                    
-                    if (!localStorage.getItem('cachedProfiles')) {
-                        const list = document.getElementById('existing-users-list');
-                        if (list) list.innerHTML = '<span class="text-sm text-rose-500 dark:text-rose-400 italic">Failed to load profiles. Please manually type your name.</span>';
-                    }
-                } else {
-                    console.log("Offline mode active. Using cached data.");
-                }
-            }
-        }
 
-        function loadCachedProfiles() {
-            const cached = localStorage.getItem('cachedProfiles');
-            if (cached) {
-                renderUserButtons(JSON.parse(cached));
-            }
-        }
-
-        function extractExistingReviewers() {
-            if (allData.length === 0) {
-                renderUserButtons([]);
-                return;
-            }
-            
-            const keys = Object.keys(allData[0]);
-            const existingUsers = [];
-            
-            keys.forEach(key => {
-                if (key.endsWith('_Verified')) {
-                    const name = key.replace('_Verified', '');
-                    if(name !== 'Verified_Is_Correct') { // Ignore the old legacy column
-                        existingUsers.push(name.replace(/_/g, ' '));
-                    }
-                }
             });
 
-            // Cache the users so next time the app opens, they appear instantly
-            if (existingUsers.length > 0) {
-                localStorage.setItem('cachedProfiles', JSON.stringify(existingUsers));
-            }
-            
-            renderUserButtons(existingUsers);
-        }
 
-        function renderUserButtons(users) {
-            const list = document.getElementById('existing-users-list');
-            if (!list) return;
-            
-            list.innerHTML = '';
+        // Switch reviewer
+        document.getElementById('btn-switch-user')
+            .addEventListener('click', () => {
 
-            if (users.length > 0) {
-                users.forEach(user => {
-                    const btn = document.createElement('button');
-                    btn.className = "bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 border border-slate-200 dark:border-slate-600 flex items-center gap-2 active:scale-95 shadow-sm";
-                    btn.innerHTML = `<span>${user}</span>`;
-                    btn.onclick = (e) => loginAsExistingUser(user, e.currentTarget);
-                    list.appendChild(btn);
-                });
-            } else {
-                list.innerHTML = '<span class="text-sm text-slate-400 italic">No existing profiles found.</span>';
-            }
-        }
+                localStorage.removeItem('reviewerName');
 
-        function loginAsExistingUser(name, btnElement) {
-            document.getElementById('input-reviewer-name').value = name;
-            
-            if (btnElement) {
-                const originalContent = btnElement.innerHTML;
-                btnElement.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Loading...`;
-                btnElement.classList.add('opacity-70', 'pointer-events-none');
-                
-                setTimeout(() => {
-                    handleLogin();
-                    // Reset button state just in case user logs out and returns
-                    setTimeout(() => {
-                        btnElement.innerHTML = originalContent;
-                        btnElement.classList.remove('opacity-70', 'pointer-events-none');
-                    }, 500);
-                }, 400); // Added a UX delay so the user sees the loading state
-            } else {
-                handleLogin();
-            }
-        }
+                currentReviewer = '';
+                verifyColKey = '';
+                commentColKey = '';
 
-        function handleLogin(e) {
-            const name = document.getElementById('input-reviewer-name').value.trim();
-            if(!name) {
-                showToast("Please enter a name", "error");
-                return;
-            }
-            
-            // Handle loading state for main "Continue" button
-            const mainBtn = document.getElementById('btn-login');
-            let isMainClick = false;
-            let originalBtnHtml = "";
-            
-            if (e && e.currentTarget === mainBtn) {
-                isMainClick = true;
-                originalBtnHtml = mainBtn.innerHTML;
-                mainBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Setting up...</span>`;
-                mainBtn.classList.add('opacity-80', 'pointer-events-none');
-            }
-            
-            setTimeout(() => {
-                currentReviewer = name;
-                localStorage.setItem('reviewerName', currentReviewer);
-                setupReviewerKeys(currentReviewer);
-                
-                document.getElementById('view-login').classList.add('hidden');
-                document.getElementById('app-header').classList.remove('hidden');
-                
-                if (isDataLoaded) {
-                    proceedToDashboard();
-                } else {
-                    document.getElementById('view-loading').classList.remove('hidden');
+                location.reload();
+
+            });
+
+
+        // Correct / Incorrect
+        document.getElementById('btn-yes')
+            .addEventListener('click', () => handleVote(true));
+
+        document.getElementById('btn-no')
+            .addEventListener('click', () => handleVote(false));
+
+
+        // Navigation
+        document.getElementById('btn-next')
+            .addEventListener('click', () => {
+
+                const currentIndex =
+                    currentViewIndices.indexOf(activeDataIndex);
+
+                if (
+                    currentIndex >= 0 &&
+                    currentIndex < currentViewIndices.length - 1
+                ) {
+                    openDetail(
+                        currentViewIndices[currentIndex + 1]
+                    );
                 }
 
-                if (isMainClick) {
-                    setTimeout(() => {
-                        mainBtn.innerHTML = originalBtnHtml;
-                        mainBtn.classList.remove('opacity-80', 'pointer-events-none');
-                    }, 500);
-                }
-            }, 400); // Add a 400ms delay to make it feel like proper authentication
-        }
+            });
 
-        function proceedToDashboard() {
-            document.getElementById('view-loading').classList.add('hidden');
-            document.getElementById('view-dashboard').classList.remove('hidden');
+
+        document.getElementById('btn-prev')
+            .addEventListener('click', () => {
+
+                const currentIndex =
+                    currentViewIndices.indexOf(activeDataIndex);
+
+                if (currentIndex > 0) {
+                    openDetail(
+                        currentViewIndices[currentIndex - 1]
+                    );
+                }
+
+            });
+
+
+        // Refresh
+        document.getElementById('btn-refresh')
+            .addEventListener('click', async () => {
+
+                const icon =
+                    document.querySelector('#btn-refresh i');
+
+                icon.classList.add('fa-spin');
+
+                try {
+
+                    await fetchDataFromSheetInBackground();
+
+                    showToast(
+                        'Data synced successfully!',
+                        'success'
+                    );
+
+                } catch (error) {
+
+                    showToast(
+                        'Failed to sync data.',
+                        'error'
+                    );
+
+                } finally {
+
+                    icon.classList.remove('fa-spin');
+
+                }
+
+            });
+
+    });
+
+
+    // ============================================================
+    // REVIEWER SETUP
+    // ============================================================
+
+    function setupReviewerKeys(name) {
+
+        const safeName = String(name)
+            .trim()
+            .replace(/[^a-zA-Z0-9]/g, '_');
+
+        verifyColKey = safeName + '_Verified';
+        commentColKey = safeName + '_Comments';
+
+        document.getElementById('header-user-name')
+            .innerText = name;
+
+        if (isDataLoaded) {
             applyFilter(currentFilter);
         }
+    }
 
-        // ==========================================
-        // THEME & BROWSER HISTORY LOGIC
-        // ==========================================
-        function setupThemeToggle() {
-            const btnTheme = document.getElementById('btn-theme');
-            btnTheme.addEventListener('click', () => {
-                const html = document.documentElement;
-                if (html.classList.contains('dark')) {
-                    html.classList.remove('dark');
-                    localStorage.theme = 'light';
-                } else {
-                    html.classList.add('dark');
-                    localStorage.theme = 'dark';
-                }
-            });
+
+    // ============================================================
+    // LOGIN
+    // ============================================================
+
+    function handleLogin() {
+
+        const input =
+            document.getElementById('input-reviewer-name');
+
+        const name = input.value.trim();
+
+        if (!name) {
+
+            showToast(
+                'Please enter your name.',
+                'error'
+            );
+
+            input.focus();
+
+            return;
         }
 
-        function setupHistoryAPI() {
-            history.replaceState({ view: 'dashboard' }, '', window.location.pathname);
-            window.addEventListener('popstate', (event) => {
-                if (!event.state || event.state.view === 'dashboard') {
-                    applyFilter(currentFilter);
-                    document.getElementById('view-detail').classList.add('hidden');
-                    document.getElementById('view-dashboard').classList.remove('hidden');
-                    document.getElementById('btn-back').classList.add('hidden');
-                }
-            });
-            document.getElementById('btn-back').addEventListener('click', () => history.back());
-        }
 
-        // ==========================================
-        // DASHBOARD & LISTING
-        // ==========================================
-        function setupTabListeners() {
-            document.querySelectorAll('.filter-tab').forEach(tab => {
-                tab.addEventListener('click', (e) => {
-                    document.querySelectorAll('.filter-tab').forEach(t => {
-                        t.className = "filter-tab px-4 py-2 rounded-full text-sm font-semibold transition-colors bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700";
-                    });
-                    const target = e.target;
-                    target.className = "filter-tab active px-4 py-2 rounded-full text-sm font-semibold transition-colors bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900";
-                    applyFilter(target.dataset.filter);
-                });
-            });
-        }
+        const loginButton =
+            document.getElementById('btn-login');
 
-        function applyFilter(filter) {
-            currentFilter = filter;
-            currentViewIndices = [];
-            const container = document.getElementById('list-container');
-            container.innerHTML = '';
+        const originalHTML =
+            loginButton.innerHTML;
 
-            if (allData.length === 0) {
-                container.innerHTML = `<div class="text-center p-8 text-slate-500">No data found in sheet.</div>`;
-                return;
+        loginButton.innerHTML =
+            '<i class="fa-solid fa-spinner fa-spin"></i> <span>Setting up...</span>';
+
+        loginButton.classList.add(
+            'opacity-80',
+            'pointer-events-none'
+        );
+
+
+        setTimeout(() => {
+
+            currentReviewer = name;
+
+            localStorage.setItem(
+                'reviewerName',
+                currentReviewer
+            );
+
+            setupReviewerKeys(currentReviewer);
+
+            document.getElementById('view-login')
+                .classList.add('hidden');
+
+            document.getElementById('app-header')
+                .classList.remove('hidden');
+
+
+            if (isDataLoaded) {
+
+                proceedToDashboard();
+
+            } else {
+
+                document.getElementById('view-loading')
+                    .classList.remove('hidden');
+
             }
 
-            let hasItems = false;
 
-            allData.forEach((row, index) => {
-                // Use the specific user's verification column
-                const userAnswer = row[verifyColKey];
-                const isVerified = !!userAnswer;
-                
-                if (filter === 'pending' && isVerified) return;
-                if (filter === 'verified' && !isVerified) return;
-                
-                currentViewIndices.push(index);
-                hasItems = true;
+            loginButton.innerHTML = originalHTML;
 
-                const el = document.createElement('div');
-                el.className = "bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-start gap-3 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-all active:scale-[0.99]";
-                
-                let iconHtml = '<i class="fa-regular fa-circle text-slate-300 dark:text-slate-600 text-xl"></i>';
-                if (userAnswer === 'Yes') iconHtml = '<i class="fa-solid fa-circle-check text-emerald-500 text-xl"></i>';
-                if (userAnswer === 'No') iconHtml = '<i class="fa-solid fa-circle-xmark text-rose-500 text-xl"></i>';
+            loginButton.classList.remove(
+                'opacity-80',
+                'pointer-events-none'
+            );
 
-                const idLabel = escapeHTML(row.ID || `Row ${row._rowIndex}`);
-                const previewTitle = escapeHTML(row.Original_English || 'No original text available');
-                const previewSubtitle = escapeHTML(row.Level_100_Telugu || 'No translation available');
-                
-                const hasComment = !!row[commentColKey];
-                
-                el.innerHTML = `
-                    <div class="mt-0.5 shrink-0 flex items-center justify-center w-6 h-6">${iconHtml}</div>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center justify-between mb-1">
-                            <span class="text-[11px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded tracking-wide">${idLabel}</span>
-                            ${hasComment ? '<i class="fa-solid fa-comment text-blue-400 text-xs"></i>' : ''}
-                        </div>
-                        <p class="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">${previewTitle}</p>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 truncate mt-1">${previewSubtitle}</p>
-                    </div>
-                `;
-                
-                el.onclick = () => openDetail(index);
-                container.appendChild(el);
+        }, 300);
+
+    }
+
+
+    // ============================================================
+    // GOOGLE SHEETS GET
+    // ============================================================
+
+    async function fetchDataFromSheetInBackground() {
+
+        try {
+
+            const url =
+                scriptUrl +
+                '?t=' +
+                Date.now();
+
+
+            const response = await fetch(url, {
+                method: 'GET',
+                redirect: 'follow',
+                cache: 'no-store'
             });
 
-            if (!hasItems) {
-                container.innerHTML = `<div class="text-center flex flex-col items-center justify-center py-12 text-slate-500">
-                    <div class="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-3">
-                        <i class="fa-solid fa-folder-open text-2xl text-slate-300 dark:text-slate-600"></i>
-                    </div>
-                    <p>No ${filter === 'all' ? '' : filter} items found.</p>
-                </div>`;
+
+            if (!response.ok) {
+                throw new Error(
+                    'HTTP error: ' +
+                    response.status
+                );
             }
+
+
+            const freshData =
+                await response.json();
+
+
+            // Apps Script should return ARRAY
+            if (!Array.isArray(freshData)) {
+
+                if (freshData && freshData.error) {
+
+                    throw new Error(
+                        freshData.message ||
+                        'Google Apps Script returned an error.'
+                    );
+
+                }
+
+                throw new Error(
+                    'Invalid dataset format returned by Google Sheets.'
+                );
+            }
+
+
+            // Validate dataset
+            if (freshData.length > 0) {
+
+                const firstRow = freshData[0];
+
+                const missingColumns =
+                    DATASET_COLUMNS.filter(
+                        column =>
+                            !Object.prototype.hasOwnProperty.call(
+                                firstRow,
+                                column
+                            )
+                    );
+
+
+                if (missingColumns.length > 0) {
+
+                    throw new Error(
+                        'Missing dataset columns: ' +
+                        missingColumns.join(', ')
+                    );
+
+                }
+
+            }
+
+
+            allData = freshData;
+            isDataLoaded = true;
+
+
+            // Cache dataset
+            localStorage.setItem(
+                'cachedSheetData',
+                JSON.stringify(allData)
+            );
+
+
+            // Detect reviewers
+            extractExistingReviewers();
+
+
+            // Refresh current screen
+            if (
+                currentReviewer &&
+                !document.getElementById(
+                    'view-dashboard'
+                ).classList.contains('hidden') &&
+                history.state?.view !== 'detail'
+            ) {
+
+                applyFilter(currentFilter);
+
+            }
+            else if (
+                currentReviewer &&
+                document.getElementById(
+                    'view-dashboard'
+                ).classList.contains('hidden') &&
+                history.state?.view !== 'detail'
+            ) {
+
+                proceedToDashboard();
+
+            }
+
+
+            return allData;
+
+
+        } catch (error) {
+
+            console.error(
+                'Google Sheets fetch error:',
+                error
+            );
+
+
+            if (!isDataLoaded) {
+
+                showToast(
+                    'Failed to connect to Google Sheets.',
+                    'error'
+                );
+
+            }
+            else {
+
+                console.log(
+                    'Using cached dataset.'
+                );
+
+            }
+
+
+            throw error;
+        }
+
+    }
+
+
+    // ============================================================
+    // REVIEWER PROFILE DETECTION
+    // ============================================================
+
+    function extractExistingReviewers() {
+
+        if (!Array.isArray(allData) || allData.length === 0) {
+
+            renderUserButtons([]);
+
+            return;
+        }
+
+
+        const keys =
+            Object.keys(allData[0]);
+
+        const existingUsers = [];
+
+
+        keys.forEach(key => {
+
+            if (
+                key.endsWith('_Verified') &&
+                key !== 'Verified_Is_Correct'
+            ) {
+
+                const name =
+                    key.substring(
+                        0,
+                        key.length - '_Verified'.length
+                    );
+
+                if (name) {
+
+                    existingUsers.push(
+                        name.replace(/_/g, ' ')
+                    );
+
+                }
+
+            }
+
+        });
+
+
+        const uniqueUsers =
+            [...new Set(existingUsers)];
+
+
+        localStorage.setItem(
+            'cachedProfiles',
+            JSON.stringify(uniqueUsers)
+        );
+
+
+        renderUserButtons(uniqueUsers);
+
+    }
+
+
+    function loadCachedProfiles() {
+
+        const cached =
+            localStorage.getItem('cachedProfiles');
+
+        if (!cached) return;
+
+
+        try {
+
+            const users = JSON.parse(cached);
+
+            if (Array.isArray(users)) {
+                renderUserButtons(users);
+            }
+
+        } catch (error) {
+
+            console.error(
+                'Profile cache error:',
+                error
+            );
+
+        }
+
+    }
+
+
+    function renderUserButtons(users) {
+
+        const list =
+            document.getElementById(
+                'existing-users-list'
+            );
+
+        if (!list) return;
+
+
+        list.innerHTML = '';
+
+
+        if (!users || users.length === 0) {
+
+            list.innerHTML = `
+                <span class="text-sm text-slate-400 italic">
+                    No existing profiles yet.
+                </span>
+            `;
+
+            return;
+        }
+
+
+        users.forEach(user => {
+
+            const button =
+                document.createElement('button');
+
+            button.type = 'button';
+
+            button.className =
+                'px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 ' +
+                'text-slate-700 dark:text-slate-200 text-sm font-semibold ' +
+                'hover:bg-blue-100 dark:hover:bg-blue-900/30 ' +
+                'hover:text-blue-600 dark:hover:text-blue-400 ' +
+                'transition-colors';
+
+
+            button.innerHTML =
+                `<i class="fa-solid fa-user mr-1"></i>${escapeHTML(user)}`;
+
+
+            button.addEventListener(
+                'click',
+                () => {
+
+                    document.getElementById(
+                        'input-reviewer-name'
+                    ).value = user;
+
+                    handleLogin();
+
+                }
+            );
+
+
+            list.appendChild(button);
+
+        });
+
+    }
+
+
+    // ============================================================
+    // DASHBOARD
+    // ============================================================
+
+    function proceedToDashboard() {
+
+        document.getElementById(
+            'view-loading'
+        ).classList.add('hidden');
+
+        document.getElementById(
+            'view-detail'
+        ).classList.add('hidden');
+
+        document.getElementById(
+            'view-dashboard'
+        ).classList.remove('hidden');
+
+        document.getElementById(
+            'btn-back'
+        ).classList.add('hidden');
+
+
+        applyFilter(currentFilter);
+
+    }
+
+
+    // ============================================================
+    // FILTER TABS
+    // ============================================================
+
+    function setupTabListeners() {
+
+        document
+            .querySelectorAll('.filter-tab')
+            .forEach(tab => {
+
+                tab.addEventListener(
+                    'click',
+                    event => {
+
+                        document
+                            .querySelectorAll('.filter-tab')
+                            .forEach(t => {
+
+                                t.className =
+                                    'filter-tab px-4 py-2 rounded-full ' +
+                                    'text-sm font-semibold transition-colors ' +
+                                    'bg-white dark:bg-slate-800 ' +
+                                    'text-slate-600 dark:text-slate-300 ' +
+                                    'border border-slate-200 dark:border-slate-700 ' +
+                                    'hover:bg-slate-100 dark:hover:bg-slate-700';
+
+                            });
+
+
+                        const target =
+                            event.currentTarget;
+
+
+                        target.className =
+                            'filter-tab active px-4 py-2 rounded-full ' +
+                            'text-sm font-semibold transition-colors ' +
+                            'bg-slate-800 dark:bg-slate-200 ' +
+                            'text-white dark:text-slate-900';
+
+
+                        applyFilter(
+                            target.dataset.filter
+                        );
+
+                    }
+                );
+
+            });
+
+    }
+
+
+    // ============================================================
+    // APPLY FILTER
+    // ============================================================
+
+    function applyFilter(filter) {
+
+        currentFilter = filter;
+
+        currentViewIndices = [];
+
+
+        const container =
+            document.getElementById(
+                'list-container'
+            );
+
+        container.innerHTML = '';
+
+
+        if (!Array.isArray(allData) || allData.length === 0) {
+
+            container.innerHTML = `
+                <div class="text-center p-8 text-slate-500">
+                    No data found in sheet.
+                </div>
+            `;
 
             updateStats();
+
+            return;
         }
 
-        function updateStats() {
-            const total = allData.length;
-            const completed = allData.filter(r => !!r[verifyColKey]).length;
-            document.getElementById('stats-completed').innerText = completed;
-            document.getElementById('stats-total').innerText = total;
-        }
 
-        // ==========================================
-        // DETAIL VIEW
-        // ==========================================
-        function openDetail(dataIndex) {
-            activeDataIndex = dataIndex;
-            const row = allData[dataIndex];
-            
-            if (history.state?.view !== 'detail') {
-                history.pushState({ view: 'detail', id: dataIndex }, '', '#review');
-            }
+        let hasItems = false;
 
-            document.getElementById('detail-id').innerText = row.ID || `ID Not Set`;
-            document.getElementById('detail-row').innerText = `Sheet Row: ${row._rowIndex}`;
-            
-            const levelsContainer = document.getElementById('levels-container');
-            levelsContainer.innerHTML = '';
-            
-            const fieldConfig = [
-                { key: 'Original_English', label: 'Original English', style: 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800' },
-                { key: 'Level_0_English', label: 'Level 0 (English)', style: 'border-blue-400 bg-blue-50/40 dark:bg-blue-900/10' },
-                { key: 'Level_25_CodeMix', label: 'Level 25 (CodeMix)', style: 'border-indigo-400 bg-indigo-50/40 dark:bg-indigo-900/10' },
-                { key: 'Level_50_CodeMix', label: 'Level 50 (CodeMix)', style: 'border-violet-400 bg-violet-50/40 dark:bg-violet-900/10' },
-                { key: 'Level_75_CodeMix', label: 'Level 75 (CodeMix)', style: 'border-purple-400 bg-purple-50/40 dark:bg-purple-900/10' },
-                { key: 'Level_100_Telugu', label: 'Level 100 (Telugu)', style: 'border-fuchsia-400 bg-fuchsia-50/40 dark:bg-fuchsia-900/10' }
-            ];
 
-            fieldConfig.forEach(item => {
-                if(row[item.key] !== undefined && row[item.key] !== "") {
-                    levelsContainer.innerHTML += `
-                        <div class="border-l-4 ${item.style} rounded-r-xl p-3 shadow-sm border border-slate-200 dark:border-slate-700/50 border-l-[4px]">
-                            <div class="flex justify-between items-start mb-1">
-                                <div class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-1">${item.label}</div>
-                            </div>
-                            <div class="text-sm sm:text-base text-slate-800 dark:text-slate-200 font-medium whitespace-pre-wrap pr-2">${escapeHTML(String(row[item.key]))}</div>
-                        </div>
-                    `;
-                }
-            });
+        allData.forEach((row, index) => {
 
-            // Load specific user's comment
-            document.getElementById('input-comment').value = row[commentColKey] || '';
+            const userAnswer =
+                row[verifyColKey] || '';
 
-            const btnYes = document.getElementById('btn-yes');
-            const btnNo = document.getElementById('btn-no');
-            
-            btnYes.className = btnYes.className.replace(/ring-4 ring-emerald-500\/30 bg-emerald-50 dark:bg-emerald-900\/30/g, 'bg-white dark:bg-slate-800');
-            btnNo.className = btnNo.className.replace(/ring-4 ring-rose-500\/30 bg-rose-50 dark:bg-rose-900\/30/g, 'bg-white dark:bg-slate-800');
-            
-            // Check specific user's verification status
-            if(row[verifyColKey] === 'Yes') {
-                btnYes.className = btnYes.className.replace('bg-white dark:bg-slate-800', 'bg-emerald-50 dark:bg-emerald-900/30 ring-4 ring-emerald-500/30');
-            } else if (row[verifyColKey] === 'No') {
-                btnNo.className = btnNo.className.replace('bg-white dark:bg-slate-800', 'bg-rose-50 dark:bg-rose-900/30 ring-4 ring-rose-500/30');
-            }
 
-            const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
-            document.getElementById('btn-prev').disabled = currentIndexInView <= 0;
-            document.getElementById('btn-next').disabled = currentIndexInView >= currentViewIndices.length - 1;
+            const isVerified =
+                userAnswer === 'Yes' ||
+                userAnswer === 'No';
 
-            document.getElementById('view-dashboard').classList.add('hidden');
-            document.getElementById('view-detail').classList.remove('hidden');
-            document.getElementById('btn-back').classList.remove('hidden');
-            
-            document.querySelector('#view-detail > div').scrollTop = 0;
-        }
 
-        // ==========================================
-        // SAVING DATA
-        // ==========================================
-        function handleVote(isCorrect) {
-            // Prevent double-clicking while it is already processing
-            if (activeDataIndex === -1 || isSubmitting) return;
-            
-            const row = allData[activeDataIndex];
-            const answerText = isCorrect ? 'Yes' : 'No';
-            const commentText = document.getElementById('input-comment').value.trim();
-
-            // If nothing changed, just move to the next
-            if (row[verifyColKey] === answerText && (row[commentColKey] || '') === commentText) {
-                goToNextOrDashboard();
+            if (
+                filter === 'pending' &&
+                isVerified
+            ) {
                 return;
             }
 
-            // --- UI FEEDBACK (Micro-interaction) ---
-            isSubmitting = true;
-            const targetBtn = isCorrect ? document.getElementById('btn-yes') : document.getElementById('btn-no');
-            const originalHtml = targetBtn.innerHTML;
 
-            // Change button to show a satisfying "Saving..." spinner
-            targetBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-xl"></i> <span class="text-xs uppercase tracking-wide">Saving...</span>`;
-            
-            // 1. BACKGROUND SYNC: Send to Google Sheets instantly so we don't lose time
-            fetch(scriptUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({
-                    rowIndex: row._rowIndex,
-                    isCorrect: answerText,
-                    comment: commentText,
-                    reviewerName: currentReviewer // Pass name to backend
-                })
-            }).catch(error => {
-                console.error("Save failed:", error);
-                showToast(`Failed to sync row ${row._rowIndex} to cloud. Check internet.`, "error");
-            });
-
-            // 2. DELAYED TRANSITION: Wait a bit longer to show deliberate effort
-            setTimeout(() => {
-                // Change to a brief "Saved!" checkmark state
-                targetBtn.innerHTML = `<i class="fa-solid fa-check text-xl"></i> <span class="text-xs uppercase tracking-wide">Saved!</span>`;
-                
-                setTimeout(() => {
-                    // Restore the button back to normal
-                    targetBtn.innerHTML = originalHtml;
-                    isSubmitting = false;
-
-                    // OPTIMISTIC UPDATE: Update data in the browser memory
-                    row[verifyColKey] = answerText;
-                    row[commentColKey] = commentText;
-                    
-                    // Calculate what the next row should be BEFORE we update the list
-                    const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
-                    let nextDataIndexToLoad = -1;
-                    if (currentIndexInView >= 0 && currentIndexInView < currentViewIndices.length - 1) {
-                        nextDataIndexToLoad = currentViewIndices[currentIndexInView + 1];
-                    }
-
-                    // FAST UI NAVIGATION: Move immediately to the next screen
-                    if (nextDataIndexToLoad !== -1) {
-                        applyFilter(currentFilter); 
-                        openDetail(nextDataIndexToLoad); 
-                    } else {
-                        applyFilter(currentFilter);
-                        showToast("Reached the end of the list!", "success");
-                        history.back(); 
-                    }
-                }, 300); // Wait 300ms showing "Saved!" before moving to the next card
-            }, 600); // Wait 600ms showing "Saving..." to simulate connection effort
-        }
-
-        function goToNextOrDashboard() {
-            const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
-            if (currentIndexInView >= 0 && currentIndexInView < currentViewIndices.length - 1) {
-                openDetail(currentViewIndices[currentIndexInView + 1]);
-            } else {
-                history.back(); 
+            if (
+                filter === 'verified' &&
+                !isVerified
+            ) {
+                return;
             }
+
+
+            currentViewIndices.push(index);
+
+            hasItems = true;
+
+
+            const card =
+                document.createElement('div');
+
+
+            card.className =
+                'bg-white dark:bg-slate-800 p-4 rounded-xl ' +
+                'border border-slate-200 dark:border-slate-700 ' +
+                'shadow-sm flex items-start gap-3 cursor-pointer ' +
+                'hover:border-blue-400 dark:hover:border-blue-500 ' +
+                'transition-all active:scale-[0.99]';
+
+
+            let iconHTML =
+                '<i class="fa-regular fa-circle text-slate-300 dark:text-slate-600 text-xl"></i>';
+
+
+            if (userAnswer === 'Yes') {
+
+                iconHTML =
+                    '<i class="fa-solid fa-circle-check text-emerald-500 text-xl"></i>';
+
+            }
+            else if (userAnswer === 'No') {
+
+                iconHTML =
+                    '<i class="fa-solid fa-circle-xmark text-rose-500 text-xl"></i>';
+
+            }
+
+
+            const idLabel =
+                escapeHTML(
+                    String(
+                        row.ID ||
+                        `Row ${row._rowIndex}`
+                    )
+                );
+
+
+            // IMPORTANT:
+            // New dataset has no Original_English.
+            // Level_0_English is now the first question.
+            const previewTitle =
+                escapeHTML(
+                    String(
+                        row.Level_0_English ||
+                        'No English question available'
+                    )
+                );
+
+
+            const previewSubtitle =
+                escapeHTML(
+                    String(
+                        row.Level_100_Telugu ||
+                        'No Telugu question available'
+                    )
+                );
+
+
+            const hasComment =
+                !!row[commentColKey];
+
+
+            card.innerHTML = `
+
+                <div class="mt-0.5 shrink-0 flex items-center justify-center w-6 h-6">
+                    ${iconHTML}
+                </div>
+
+                <div class="flex-1 min-w-0">
+
+                    <div class="flex items-center justify-between mb-1">
+
+                        <span class="text-[11px] font-bold
+                            bg-slate-100 dark:bg-slate-700
+                            text-slate-600 dark:text-slate-300
+                            px-2 py-0.5 rounded tracking-wide">
+
+                            ${idLabel}
+
+                        </span>
+
+                        ${
+                            hasComment
+                            ? '<i class="fa-solid fa-comment text-blue-400 text-xs"></i>'
+                            : ''
+                        }
+
+                    </div>
+
+
+                    <p class="text-sm font-bold
+                        text-slate-800 dark:text-slate-200 truncate">
+
+                        ${previewTitle}
+
+                    </p>
+
+
+                    <p class="text-xs
+                        text-slate-500 dark:text-slate-400
+                        truncate mt-1">
+
+                        ${previewSubtitle}
+
+                    </p>
+
+                </div>
+            `;
+
+
+            card.onclick = () =>
+                openDetail(index);
+
+
+            container.appendChild(card);
+
+        });
+
+
+        if (!hasItems) {
+
+            container.innerHTML = `
+
+                <div class="text-center flex flex-col
+                    items-center justify-center py-12
+                    text-slate-500">
+
+                    <div class="w-16 h-16
+                        bg-slate-100 dark:bg-slate-800
+                        rounded-full flex items-center
+                        justify-center mb-3">
+
+                        <i class="fa-solid fa-folder-open
+                            text-2xl text-slate-300
+                            dark:text-slate-600"></i>
+
+                    </div>
+
+                    <p>
+                        No ${
+                            filter === 'all'
+                            ? ''
+                            : filter
+                        } items found.
+                    </p>
+
+                </div>
+            `;
+
         }
 
-        // ==========================================
-        // LISTENERS & UTILS
-        // ==========================================
-        document.getElementById('btn-yes').addEventListener('click', () => handleVote(true));
-        document.getElementById('btn-no').addEventListener('click', () => handleVote(false));
-        
-        document.getElementById('btn-back').addEventListener('click', () => {
+
+        updateStats();
+
+    }
+
+
+    // ============================================================
+    // STATISTICS
+    // ============================================================
+
+    function updateStats() {
+
+        const total =
+            Array.isArray(allData)
+            ? allData.length
+            : 0;
+
+
+        const completed =
+            Array.isArray(allData)
+            ? allData.filter(row => {
+
+                return (
+                    row[verifyColKey] === 'Yes' ||
+                    row[verifyColKey] === 'No'
+                );
+
+            }).length
+            : 0;
+
+
+        document.getElementById(
+            'stats-completed'
+        ).innerText = completed;
+
+
+        document.getElementById(
+            'stats-total'
+        ).innerText = total;
+
+    }
+
+
+    // ============================================================
+    // DETAIL VIEW
+    // ============================================================
+
+    function openDetail(dataIndex) {
+
+        if (
+            dataIndex < 0 ||
+            dataIndex >= allData.length
+        ) {
+            return;
+        }
+
+
+        activeDataIndex = dataIndex;
+
+
+        const row =
+            allData[dataIndex];
+
+
+        if (history.state?.view !== 'detail') {
+
+            history.pushState(
+                {
+                    view: 'detail',
+                    id: dataIndex
+                },
+                '',
+                '#review'
+            );
+
+        }
+
+
+        document.getElementById(
+            'detail-id'
+        ).innerText =
+            row.ID || 'ID Not Set';
+
+
+        document.getElementById(
+            'detail-row'
+        ).innerText =
+            `Sheet Row: ${row._rowIndex}`;
+
+
+        const levelsContainer =
+            document.getElementById(
+                'levels-container'
+            );
+
+
+        levelsContainer.innerHTML = '';
+
+
+        // ========================================================
+        // ONLY THE FIVE DATASET LEVELS
+        // Gold_Target is intentionally NOT shown.
+        // ========================================================
+
+        const fieldConfig = [
+
+            {
+                key: 'Level_0_English',
+                label: 'Level 0 — English',
+                style:
+                    'border-blue-400 bg-blue-50/40 dark:bg-blue-900/10'
+            },
+
+            {
+                key: 'Level_25_CodeMix',
+                label: 'Level 25 — CodeMix',
+                style:
+                    'border-indigo-400 bg-indigo-50/40 dark:bg-indigo-900/10'
+            },
+
+            {
+                key: 'Level_50_CodeMix',
+                label: 'Level 50 — CodeMix',
+                style:
+                    'border-violet-400 bg-violet-50/40 dark:bg-violet-900/10'
+            },
+
+            {
+                key: 'Level_75_CodeMix',
+                label: 'Level 75 — CodeMix',
+                style:
+                    'border-purple-400 bg-purple-50/40 dark:bg-purple-900/10'
+            },
+
+            {
+                key: 'Level_100_Telugu',
+                label: 'Level 100 — Telugu',
+                style:
+                    'border-fuchsia-400 bg-fuchsia-50/40 dark:bg-fuchsia-900/10'
+            }
+
+        ];
+
+
+        fieldConfig.forEach(item => {
+
+            const value =
+                row[item.key];
+
+
+            if (
+                value === undefined ||
+                value === null ||
+                String(value).trim() === ''
+            ) {
+                return;
+            }
+
+
+            levelsContainer.innerHTML += `
+
+                <div class="
+                    border-l-4
+                    ${item.style}
+                    rounded-r-xl
+                    p-3
+                    shadow-sm
+                    border
+                    border-slate-200
+                    dark:border-slate-700/50
+                    border-l-[4px]
+                ">
+
+                    <div class="
+                        flex
+                        justify-between
+                        items-start
+                        mb-1
+                    ">
+
+                        <div class="
+                            text-[10px]
+                            font-bold
+                            text-slate-500
+                            dark:text-slate-400
+                            uppercase
+                            tracking-wider
+                            mt-1
+                        ">
+
+                            ${item.label}
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="
+                        text-sm
+                        sm:text-base
+                        text-slate-800
+                        dark:text-slate-200
+                        font-medium
+                        whitespace-pre-wrap
+                        pr-2
+                    ">
+
+                        ${escapeHTML(
+                            String(value)
+                        )}
+
+                    </div>
+
+                </div>
+
+            `;
+
+        });
+
+
+        // Load reviewer's previous comment
+        document.getElementById(
+            'input-comment'
+        ).value =
+            row[commentColKey] || '';
+
+
+        updateVoteButtons(
+            row[verifyColKey]
+        );
+
+
+        const currentIndexInView =
+            currentViewIndices.indexOf(
+                activeDataIndex
+            );
+
+
+        document.getElementById(
+            'btn-prev'
+        ).disabled =
+            currentIndexInView <= 0;
+
+
+        document.getElementById(
+            'btn-next'
+        ).disabled =
+            currentIndexInView >=
+            currentViewIndices.length - 1;
+
+
+        document.getElementById(
+            'view-dashboard'
+        ).classList.add('hidden');
+
+
+        document.getElementById(
+            'view-detail'
+        ).classList.remove('hidden');
+
+
+        document.getElementById(
+            'btn-back'
+        ).classList.remove('hidden');
+
+
+        const detailScroll =
+            document.querySelector(
+                '#view-detail > div'
+            );
+
+
+        if (detailScroll) {
+            detailScroll.scrollTop = 0;
+        }
+
+    }
+
+
+    // ============================================================
+    // UPDATE VOTE BUTTON UI
+    // ============================================================
+
+    function updateVoteButtons(status) {
+
+        const btnYes =
+            document.getElementById('btn-yes');
+
+        const btnNo =
+            document.getElementById('btn-no');
+
+
+        // Reset
+        btnYes.classList.remove(
+            'ring-4',
+            'ring-emerald-500/30',
+            'bg-emerald-50',
+            'dark:bg-emerald-900/30'
+        );
+
+
+        btnNo.classList.remove(
+            'ring-4',
+            'ring-rose-500/30',
+            'bg-rose-50',
+            'dark:bg-rose-900/30'
+        );
+
+
+        if (status === 'Yes') {
+
+            btnYes.classList.add(
+                'ring-4',
+                'ring-emerald-500/30',
+                'bg-emerald-50',
+                'dark:bg-emerald-900/30'
+            );
+
+        }
+        else if (status === 'No') {
+
+            btnNo.classList.add(
+                'ring-4',
+                'ring-rose-500/30',
+                'bg-rose-50',
+                'dark:bg-rose-900/30'
+            );
+
+        }
+
+    }
+
+
+    // ============================================================
+    // SAVE REVIEW
+    // ============================================================
+
+    async function handleVote(isCorrect) {
+
+        if (
+            activeDataIndex === -1 ||
+            isSubmitting
+        ) {
+            return;
+        }
+
+
+        const row =
+            allData[activeDataIndex];
+
+
+        const answerText =
+            isCorrect ? 'Yes' : 'No';
+
+
+        const commentText =
+            document.getElementById(
+                'input-comment'
+            ).value.trim();
+
+
+        // Nothing changed
+        if (
+            row[verifyColKey] === answerText &&
+            (row[commentColKey] || '') === commentText
+        ) {
+
+            goToNextOrDashboard();
+
+            return;
+        }
+
+
+        isSubmitting = true;
+
+
+        const targetButton =
+            isCorrect
+            ? document.getElementById('btn-yes')
+            : document.getElementById('btn-no');
+
+
+        const otherButton =
+            isCorrect
+            ? document.getElementById('btn-no')
+            : document.getElementById('btn-yes');
+
+
+        const originalHTML =
+            targetButton.innerHTML;
+
+
+        // Disable both buttons
+        targetButton.disabled = true;
+        otherButton.disabled = true;
+
+
+        targetButton.innerHTML = `
+            <i class="fa-solid fa-spinner fa-spin text-xl"></i>
+            <span class="text-xs uppercase tracking-wide">
+                Saving...
+            </span>
+        `;
+
+
+        try {
+
+            // ====================================================
+            // WAIT FOR GOOGLE SHEETS RESPONSE
+            // ====================================================
+
+            const response =
+                await fetch(scriptUrl, {
+
+                    method: 'POST',
+
+                    headers: {
+                        'Content-Type':
+                            'text/plain;charset=utf-8'
+                    },
+
+                    body: JSON.stringify({
+
+                        rowIndex:
+                            row._rowIndex,
+
+                        isCorrect:
+                            answerText,
+
+                        comment:
+                            commentText,
+
+                        reviewerName:
+                            currentReviewer
+
+                    })
+
+                });
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    'HTTP ' +
+                    response.status
+                );
+
+            }
+
+
+            const result =
+                await response.json();
+
+
+            if (
+                !result ||
+                result.success !== true
+            ) {
+
+                throw new Error(
+                    result?.error ||
+                    'Google Sheets rejected the save.'
+                );
+
+            }
+
+
+            // ====================================================
+            // ONLY UPDATE LOCAL DATA AFTER SERVER CONFIRMATION
+            // ====================================================
+
+            row[verifyColKey] =
+                answerText;
+
+            row[commentColKey] =
+                commentText;
+
+
+            // Update cache
+            localStorage.setItem(
+                'cachedSheetData',
+                JSON.stringify(allData)
+            );
+
+
+            targetButton.innerHTML = `
+                <i class="fa-solid fa-check text-xl"></i>
+                <span class="text-xs uppercase tracking-wide">
+                    Saved!
+                </span>
+            `;
+
+
+            showToast(
+                'Review saved successfully.',
+                'success'
+            );
+
+
+            await sleep(350);
+
+
+            // ====================================================
+            // DETERMINE NEXT QUESTION
+            // ====================================================
+
+            const currentIndexInView =
+                currentViewIndices.indexOf(
+                    activeDataIndex
+                );
+
+
+            let nextDataIndex = -1;
+
+
+            if (
+                currentIndexInView >= 0 &&
+                currentIndexInView <
+                    currentViewIndices.length - 1
+            ) {
+
+                nextDataIndex =
+                    currentViewIndices[
+                        currentIndexInView + 1
+                    ];
+
+            }
+
+
+            isSubmitting = false;
+
+
+            targetButton.innerHTML =
+                originalHTML;
+
+            targetButton.disabled = false;
+            otherButton.disabled = false;
+
+
+            // ====================================================
+            // GO NEXT
+            // ====================================================
+
+            if (nextDataIndex !== -1) {
+
+                openDetail(
+                    nextDataIndex
+                );
+
+            }
+            else {
+
+                // End of current filter
+                applyFilter(
+                    currentFilter
+                );
+
+                document.getElementById(
+                    'view-detail'
+                ).classList.add('hidden');
+
+                document.getElementById(
+                    'view-dashboard'
+                ).classList.remove('hidden');
+
+                document.getElementById(
+                    'btn-back'
+                ).classList.add('hidden');
+
+                history.replaceState(
+                    { view: 'dashboard' },
+                    '',
+                    window.location.pathname
+                );
+
+
+                showToast(
+                    'You reached the end of this list.',
+                    'success'
+                );
+
+            }
+
+
+        } catch (error) {
+
+            console.error(
+                'Save failed:',
+                error
+            );
+
+
+            targetButton.innerHTML = originalHTML;
+
+            targetButton.disabled = false;
+            otherButton.disabled = false;
+
+
+            isSubmitting = false;
+
+
+            showToast(
+                'Save failed. Your review was NOT marked as saved.',
+                'error'
+            );
+
+        }
+
+    }
+
+
+    // ============================================================
+    // NEXT / DASHBOARD
+    // ============================================================
+
+    function goToNextOrDashboard() {
+
+        const currentIndexInView =
+            currentViewIndices.indexOf(
+                activeDataIndex
+            );
+
+
+        if (
+            currentIndexInView >= 0 &&
+            currentIndexInView <
+                currentViewIndices.length - 1
+        ) {
+
+            openDetail(
+                currentViewIndices[
+                    currentIndexInView + 1
+                ]
+            );
+
+        }
+        else {
+
             history.back();
-        });
-        
-        document.getElementById('btn-next').addEventListener('click', () => {
-            const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
-            if (currentIndexInView < currentViewIndices.length - 1) openDetail(currentViewIndices[currentIndexInView + 1]);
-        });
-        
-        document.getElementById('btn-prev').addEventListener('click', () => {
-            const currentIndexInView = currentViewIndices.indexOf(activeDataIndex);
-            if (currentIndexInView > 0) openDetail(currentViewIndices[currentIndexInView - 1]);
-        });
 
-        document.getElementById('btn-refresh').addEventListener('click', () => {
-            const icon = document.querySelector('#btn-refresh i');
-            icon.classList.add('fa-spin'); 
-            document.getElementById('view-loading').classList.remove('hidden');
-            document.getElementById('view-dashboard').classList.add('hidden');
-            
-            fetchDataFromSheetInBackground().finally(() => {
-                icon.classList.remove('fa-spin');
-                showToast("Data synced!", "success");
-            });
-        });
-
-        function escapeHTML(str) {
-            if (!str) return '';
-            return str.replace(/[&<>'"]/g, tag => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-            }[tag]));
         }
 
-        function showToast(message, type = 'info') {
-            const toastEl = document.getElementById('toast');
-            const toastIcon = document.getElementById('toast-icon');
-            document.getElementById('toast-message').innerText = message;
-            
-            if (type === 'success') toastIcon.className = 'fa-solid fa-circle-check text-emerald-400';
-            else if (type === 'error') toastIcon.className = 'fa-solid fa-circle-xmark text-rose-400';
-            else toastIcon.className = 'fa-solid fa-circle-info text-blue-400';
+    }
 
-            toastEl.style.transform = 'translateY(0)';
-            toastEl.style.opacity = '1';
 
+    // ============================================================
+    // THEME
+    // ============================================================
+
+    function setupThemeToggle() {
+
+        const btnTheme =
+            document.getElementById(
+                'btn-theme'
+            );
+
+
+        btnTheme.addEventListener(
+            'click',
+            () => {
+
+                const html =
+                    document.documentElement;
+
+
+                if (
+                    html.classList.contains(
+                        'dark'
+                    )
+                ) {
+
+                    html.classList.remove(
+                        'dark'
+                    );
+
+                    localStorage.theme =
+                        'light';
+
+                }
+                else {
+
+                    html.classList.add(
+                        'dark'
+                    );
+
+                    localStorage.theme =
+                        'dark';
+
+                }
+
+            }
+        );
+
+    }
+
+
+    // ============================================================
+    // BROWSER HISTORY
+    // ============================================================
+
+    function setupHistoryAPI() {
+
+        history.replaceState(
+            {
+                view: 'dashboard'
+            },
+            '',
+            window.location.pathname
+        );
+
+
+        window.addEventListener(
+            'popstate',
+            event => {
+
+                if (
+                    !event.state ||
+                    event.state.view === 'dashboard'
+                ) {
+
+                    document.getElementById(
+                        'view-detail'
+                    ).classList.add('hidden');
+
+
+                    document.getElementById(
+                        'view-dashboard'
+                    ).classList.remove('hidden');
+
+
+                    document.getElementById(
+                        'btn-back'
+                    ).classList.add('hidden');
+
+
+                    applyFilter(
+                        currentFilter
+                    );
+
+                }
+
+            }
+        );
+
+
+        document.getElementById(
+            'btn-back'
+        ).addEventListener(
+            'click',
+            () => {
+
+                history.back();
+
+            }
+        );
+
+    }
+
+
+    // ============================================================
+    // UTILITIES
+    // ============================================================
+
+    function escapeHTML(value) {
+
+        if (
+            value === null ||
+            value === undefined
+        ) {
+            return '';
+        }
+
+
+        const str =
+            String(value);
+
+
+        return str.replace(
+            /[&<>'"]/g,
+            tag => ({
+
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#39;',
+                '"': '&quot;'
+
+            }[tag])
+        );
+
+    }
+
+
+    function sleep(milliseconds) {
+
+        return new Promise(
+            resolve =>
+                setTimeout(
+                    resolve,
+                    milliseconds
+                )
+        );
+
+    }
+
+
+    // ============================================================
+    // TOAST
+    // ============================================================
+
+    function showToast(
+        message,
+        type = 'info'
+    ) {
+
+        const toastEl =
+            document.getElementById(
+                'toast'
+            );
+
+
+        const toastIcon =
+            document.getElementById(
+                'toast-icon'
+            );
+
+
+        document.getElementById(
+            'toast-message'
+        ).innerText = message;
+
+
+        if (type === 'success') {
+
+            toastIcon.className =
+                'fa-solid fa-circle-check text-emerald-400';
+
+        }
+        else if (type === 'error') {
+
+            toastIcon.className =
+                'fa-solid fa-circle-xmark text-rose-400';
+
+        }
+        else {
+
+            toastIcon.className =
+                'fa-solid fa-circle-info text-blue-400';
+
+        }
+
+
+        toastEl.style.transform =
+            'translateY(0)';
+
+        toastEl.style.opacity =
+            '1';
+
+
+        clearTimeout(
+            toastEl._hideTimer
+        );
+
+
+        toastEl._hideTimer =
             setTimeout(() => {
-                toastEl.style.transform = 'translateY(-150%)';
-                toastEl.style.opacity = '0';
+
+                toastEl.style.transform =
+                    'translateY(-150%)';
+
+                toastEl.style.opacity =
+                    '0';
+
             }, 3000);
-        }
-    </script>
+
+    }
+
+</script>
 </body>
 </html>
